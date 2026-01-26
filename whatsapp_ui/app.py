@@ -7,6 +7,8 @@ import json
 import sqlite3
 import google.generativeai as genai
 from datetime import datetime
+from whatsapp_web_client import WhatsAppWebClient
+import threading
 
 app = Flask(__name__)
 
@@ -14,6 +16,10 @@ app = Flask(__name__)
 CONFIG_FILE = 'config.json'
 DB_FILE = 'whatsapp.db'
 config = {}
+
+# Global Client Instance for Gateway Mode
+whatsapp_client = None
+client_lock = threading.Lock()
 
 def load_config():
     global config
@@ -85,6 +91,40 @@ logging.basicConfig(level=logging.INFO)
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/connect')
+def connect():
+    return render_template('connect.html')
+
+@app.route('/api/start_connection', methods=['POST'])
+def start_connection():
+    global whatsapp_client
+    with client_lock:
+        if whatsapp_client:
+            whatsapp_client.close()
+        
+        # Sessions will be stored in a local folder
+        session_dir = os.path.abspath("whatsapp_sessions")
+        os.makedirs(session_dir, exist_ok=True)
+        whatsapp_client = WhatsAppWebClient(user_data_dir=session_dir)
+        
+        try:
+            status, data = whatsapp_client.get_qr_code_or_login()
+            return jsonify({"status": status, "qr_code": data})
+        except Exception as e:
+            logging.error(f"Failed to start connection: {e}")
+            return jsonify({"error": str(e)}), 500
+
+@app.route('/api/check_login', methods=['GET'])
+def check_login():
+    if not whatsapp_client:
+        return jsonify({"status": "not_started"})
+    
+    try:
+        is_logged_in = whatsapp_client.is_logged_in()
+        return jsonify({"status": "logged_in" if is_logged_in else "qr_pending"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/settings')
 def settings():
@@ -293,6 +333,54 @@ def send_message():
     except requests.exceptions.RequestException as e:
         logging.error(f"Error calling Home Assistant service: {e}")
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/proxy_send_message', methods=['POST'])
+def proxy_send_message():
+    """Endpoint for HA to send a message via this gateway's browser."""
+    data = request.json
+    contact = data.get('contact')
+    message = data.get('message')
+
+    if not whatsapp_client:
+        return jsonify({"error": "WhatsApp client not running on gateway"}), 500
+
+    try:
+        whatsapp_client.send_message(contact, message)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+def monitoring_thread():
+    """Background task to poll WhatsApp and push to HA."""
+    logging.info("Starting monitoring thread...")
+    logged_messages = set()
+    while True:
+        if whatsapp_client and whatsapp_client.is_logged_in():
+            try:
+                # For this prototype, we monitor "Me" or recent chats
+                # In a full version, this would be more dynamic
+                chats = ["Me"] 
+                for chat in chats:
+                    messages = whatsapp_client.get_latest_messages(chat)
+                    for msg in messages:
+                        if msg not in logged_messages:
+                            logging.info(f"New message from {chat}: {msg}")
+                            # Push to HA if configured
+                            ha_url = config.get("ha_url")
+                            if ha_url:
+                                try:
+                                    # Simple webhook push to HA (if HA supports it)
+                                    # Or we just store it locally and HA polls
+                                    pass 
+                                except:
+                                    pass
+                            logged_messages.add(msg)
+            except Exception as e:
+                logging.error(f"Error in monitoring: {e}")
+        time.sleep(15)
+
+# Start background monitor
+threading.Thread(target=monitoring_thread, daemon=True).start()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001, debug=False)

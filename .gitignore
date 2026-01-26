@@ -15,6 +15,9 @@ env/
 whatsapp_hass_sessions/
 whatsapp_logs/
 *.log
+*.crdownload
+whatsapp.db
+config.json
 
 # Web UI
 whatsapp_ui/whatsapp.db

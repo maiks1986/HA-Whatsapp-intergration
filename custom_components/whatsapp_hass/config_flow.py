@@ -37,77 +37,15 @@ class WhatsAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         await self.async_set_unique_id(self.account_name)
         self._abort_if_unique_id_configured()
 
-        self.user_data_dir = self.hass.config.path(f"whatsapp_hass_sessions/{self.account_name}")
-        
-        self._client = WhatsAppWebClient(user_data_dir=self.user_data_dir)
-        
-        try:
-            status, qr_base64 = await self.hass.async_add_executor_job(self._client.get_qr_code_or_login)
+        return self.async_create_entry(
+            title=self.account_name, 
+            data={
+                "name": self.account_name, 
+                "monitor_only": self.monitor_only,
+                "web_ui_url": self.web_ui_url
+            }
+        )
 
-            if status == "logged_in":
-                return self.async_create_entry(
-                    title=self.account_name, 
-                    data={
-                        "name": self.account_name, 
-                        "user_data_dir": self.user_data_dir,
-                        "monitor_only": self.monitor_only,
-                        "web_ui_url": self.web_ui_url
-                    }
-                )
-            else:
-                self.qr_base64 = qr_base64
-                return await self.async_step_scan_qr()
-
-        except Exception as e:
-            _LOGGER.error("Failed to get QR code or login: %s", e)
-            if os.path.exists(self.user_data_dir):
-                # If there was an error, clean up the session directory
-                # This is a bit aggressive, but for now it's better than leaving a corrupted session
-                await self.hass.async_add_executor_job(os.rmdir, self.user_data_dir)
-
-            if self._client:
-                await self.hass.async_add_executor_job(self._client.close)
-            return self.async_abort(reason="init_error")
-
-
-    async def async_step_scan_qr(self, user_input=None):
-        """Show the QR code and ask the user to scan it."""
-        if user_input is None:
-            return self.async_show_form(
-                step_id="scan_qr",
-                description_placeholders={
-                    "qr_code_image": f'<img src="data:image/png;base64,{self.qr_base64}">'
-                },
-                errors={},
-            )
-
-        try:
-            is_logged_in = await self.hass.async_add_executor_job(self._client.is_logged_in)
-            if is_logged_in:
-                return self.async_create_entry(
-                    title=self.account_name, 
-                    data={
-                        "name": self.account_name, 
-                        "user_data_dir": self.user_data_dir,
-                        "monitor_only": self.monitor_only,
-                        "web_ui_url": self.web_ui_url
-                    }
-                )
-            else:
-                return self.async_show_form(
-                    step_id="scan_qr",
-                    description_placeholders={
-                        "qr_code_image": f'<img src="data:image/png;base64,{self.qr_base64}">'
-                    },
-                    errors={"base": "not_logged_in"},
-                )
-        except Exception as e:
-            _LOGGER.error("Failed to check login status: %s", e)
-            return self.async_abort(reason="login_check_error")
-        finally:
-            if self._client:
-                await self.hass.async_add_executor_job(self._client.close)
-    
     async def async_step_reauth(self, user_input=None):
         """Handle re-authentication."""
         # This will be called if the session becomes invalid.
