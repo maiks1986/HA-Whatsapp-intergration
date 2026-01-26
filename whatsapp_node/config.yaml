@@ -10,8 +10,10 @@ startup: application
 boot: auto
 map:
   - config:rw
-options: {}
-schema: {}
+options:
+  password: ""
+schema:
+  password: password?
 ingress: true
 ingress_port: 5002
 panel_icon: mdi:whatsapp

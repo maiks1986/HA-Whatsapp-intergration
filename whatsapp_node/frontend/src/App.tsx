@@ -14,8 +14,18 @@ import {
   X,
   Settings,
   BrainCircuit,
-  Eraser
+  Eraser,
+  Lock
 } from 'lucide-react';
+
+// Configure Axios to use the token if available
+const updateAxiosAuth = (token: string | null) => {
+  if (token) {
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+  } else {
+    delete axios.defaults.headers.common['Authorization'];
+  }
+};
 
 const socket = io();
 
@@ -36,6 +46,8 @@ interface Message {
 }
 
 const App = () => {
+  const [authState, setAuthState] = useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
+  const [password, setPassword] = useState('');
   const [instances, setInstances] = useState<Instance[]>([]);
   const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -51,9 +63,44 @@ const App = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchInstances();
-    fetchGeminiKey();
-    
+    checkAuth();
+  }, []);
+
+  const checkAuth = async () => {
+    const localToken = localStorage.getItem('direct_token');
+    updateAxiosAuth(localToken);
+
+    try {
+      const res = await axios.get('/api/auth/status');
+      if (res.data.authenticated) {
+        setAuthState('authenticated');
+        fetchInstances();
+        fetchGeminiKey();
+      } else {
+        setAuthState('unauthenticated');
+      }
+    } catch (e) {
+      setAuthState('unauthenticated');
+    }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await axios.post('/api/auth/login', { password });
+      localStorage.setItem('direct_token', res.data.token);
+      updateAxiosAuth(res.data.token);
+      setAuthState('authenticated');
+      fetchInstances();
+      fetchGeminiKey();
+    } catch (err) {
+      alert("Invalid Password");
+    }
+  };
+
+  useEffect(() => {
+    if (authState !== 'authenticated') return;
+
     socket.on('instances_status', (statusUpdates: any[]) => {
       setInstances(prev => prev.map(inst => {
         const update = statusUpdates.find(u => u.id === inst.id);
@@ -64,7 +111,7 @@ const App = () => {
     return () => {
       socket.off('instances_status');
     };
-  }, []);
+  }, [authState]);
 
   useEffect(() => {
     if (selectedInstance && selectedInstance.status === 'connected') {
@@ -97,7 +144,6 @@ const App = () => {
     const res = await axios.get(`/api/messages/${instanceId}/${jid}`);
     setMessages(res.data);
     scrollToBottom();
-    // Auto-analyze intent if we have messages
     if (res.data.length > 0) analyzeIntent(res.data);
   };
 
@@ -153,6 +199,42 @@ const App = () => {
       alert("Failed to send");
     }
   };
+
+  if (authState === 'loading') {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-whatsapp-bg">
+        <RefreshCw size={48} className="text-teal-600 spin" />
+      </div>
+    );
+  }
+
+  if (authState === 'unauthenticated') {
+    return (
+      <div className="h-screen w-full flex items-center justify-center bg-whatsapp-bg">
+        <form onSubmit={handleLogin} className="bg-white p-10 rounded-2xl shadow-2xl w-[400px] text-center border-t-8 border-teal-600">
+          <div className="w-20 h-20 bg-teal-50 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Lock size={32} className="text-teal-600" />
+          </div>
+          <h1 className="text-2xl font-bold text-slate-800 mb-2">WhatsApp Pro</h1>
+          <p className="text-sm text-slate-500 mb-8 font-medium">Enter your direct access password</p>
+          <input 
+            autoFocus
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password"
+            className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-teal-500 focus:bg-white transition-all mb-6 text-center"
+          />
+          <button 
+            type="submit"
+            className="w-full bg-teal-600 text-white p-4 rounded-xl font-bold hover:bg-teal-700 shadow-lg shadow-teal-600/20 transition-all active:scale-[0.98]"
+          >
+            Login
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-whatsapp-bg overflow-hidden text-slate-800">
