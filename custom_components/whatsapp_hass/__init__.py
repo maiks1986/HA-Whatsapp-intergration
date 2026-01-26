@@ -4,29 +4,51 @@ import logging
 import os
 import subprocess
 import threading
+import sys
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.network import get_url
 from .const import DOMAIN
-from .whatsapp_web_client import WhatsAppWebClient
 
 _LOGGER = logging.getLogger(__name__)
 
 # Global storage for the UI thread
 UI_THREAD = None
 
+def ensure_dependencies():
+    """Install dependencies at runtime to avoid manifest conflicts."""
+    packages = ["playwright>=1.45.0", "google-generativeai>=0.7.2"]
+    for package in packages:
+        try:
+            # Check if already installed
+            pkg_name = package.split('>=')[0].replace('-', '_')
+            if pkg_name == "google_generativeai":
+                import google.generativeai
+            else:
+                __import__(pkg_name)
+        except ImportError:
+            _LOGGER.info(f"Installing missing dependency: {package}")
+            try:
+                subprocess.run([sys.executable, "-m", "pip", "install", package], check=True)
+            except Exception as e:
+                _LOGGER.error(f"Failed to install {package}: {e}")
+
+    # After installing playwright, install chromium
+    try:
+        _LOGGER.info("Ensuring Playwright chromium is installed...")
+        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
+    except Exception as e:
+        _LOGGER.error(f"Failed to run playwright install: {e}")
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up WhatsApp from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     
-    # Ensure Playwright browsers are installed (runs in background thread)
-    def install_playwright():
-        try:
-            _LOGGER.info("Checking Playwright browsers...")
-            subprocess.run(["python3", "-m", "playwright", "install", "chromium"], check=True)
-        except Exception as e:
-            _LOGGER.error(f"Failed to install Playwright browsers: {e}")
+    # Run installation in executor to avoid blocking
+    await hass.async_add_executor_job(ensure_dependencies)
 
-    await hass.async_add_executor_job(install_playwright)
+    # Defer import of client until dependencies are likely installed
+    from .whatsapp_web_client import WhatsAppWebClient
 
     # Initialize client
     user_data_dir = hass.config.path(f"whatsapp_sessions/{entry.data['name']}")
@@ -46,14 +68,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         "name": entry.data["name"]
     }
 
-    # Register Sidebar Panel pointing to the local HA IP
+    # Determine URL for the sidebar panel
+    try:
+        base_url = get_url(hass, allow_internal=True, allow_ip=True)
+        # Replace the port 8123 with 5001
+        panel_url = base_url.rsplit(":", 1)[0] + ":5001"
+    except:
+        panel_url = "/local/whatsapp_redirect" # Fallback if URL cannot be determined
+
+    # Register Sidebar Panel
     hass.components.frontend.async_register_panel(
         "iframe",
         "whatsapp",
         "mdi:whatsapp",
         title="WhatsApp",
-        url="http://127.0.0.1:5001", # Localhost works for the iframe if accessed locally, 
-                                     # but we'll use the external URL in reality
+        url=panel_url,
         require_admin=True,
     )
 

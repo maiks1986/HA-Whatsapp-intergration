@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connect WhatsApp - Control Center</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; background-color: #f0f2f5; display: flex; align-items: center; justify-content: center; height: 100vh; }
+        .card { background-color: white; border-radius: 8px; padding: 32px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 90%; }
+        h1 { color: #1c1e21; margin-bottom: 8px; }
+        p { color: #606770; margin-bottom: 24px; }
+        .qr-container { margin: 20px auto; min-height: 200px; display: flex; align-items: center; justify-content: center; border: 1px solid #eee; border-radius: 8px; }
+        img { max-width: 100%; height: auto; }
+        button { background-color: #1877f2; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 16px; }
+        button:hover { background-color: #166fe5; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        .status { margin-top: 16px; font-weight: 600; color: #1877f2; }
+        .back-link { display: block; margin-top: 24px; color: #606770; text-decoration: none; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Connect WhatsApp</h1>
+        <p>Scan the QR code with your phone to link your account to the Windows Gateway.</p>
+
+        <div class="qr-container" id="qr-container">
+            <p id="qr-placeholder">Click the button below to generate QR code.</p>
+        </div>
+
+        <button id="start-btn">Generate QR Code</button>
+        <div class="status" id="status-msg"></div>
+
+        <a href="/" class="back-link">← Back to Dashboard</a>
+    </div>
+
+    <script>
+        const startBtn = document.getElementById('start-btn');
+        const qrContainer = document.getElementById('qr-container');
+        const statusMsg = document.getElementById('status-msg');
+        let checkInterval = null;
+
+        startBtn.onclick = async () => {
+            startBtn.disabled = true;
+            statusMsg.innerText = "Starting Chrome... please wait.";
+            qrContainer.innerHTML = '<div class="spinner">⏳</div>';
+
+            try {
+                const response = await fetch('/api/start_connection', { method: 'POST' });
+                const result = await response.json();
+
+                if (result.qr_code) {
+                    qrContainer.innerHTML = `<img src="data:image/png;base64,${result.qr_code}" alt="WhatsApp QR Code">`;
+                    statusMsg.innerText = "QR Code generated! Scan it now.";
+                    startCheckingLogin();
+                } else if (result.status === 'logged_in') {
+                    qrContainer.innerHTML = '✅';
+                    statusMsg.innerText = "Already logged in!";
+                    setTimeout(() => window.location.href = '/', 2000);
+                } else {
+                    statusMsg.innerText = "Error: " + (result.error || "Unknown error");
+                    startBtn.disabled = false;
+                }
+            } catch (error) {
+                statusMsg.innerText = "Failed to connect to gateway.";
+                startBtn.disabled = false;
+            }
+        };
+
+        function startCheckingLogin() {
+            if (checkInterval) clearInterval(checkInterval);
+            checkInterval = setInterval(async () => {
+                try {
+                    const response = await fetch('/api/check_login');
+                    const result = await response.json();
+                    if (result.status === 'logged_in') {
+                        clearInterval(checkInterval);
+                        statusMsg.innerText = "Login Successful! Redirecting...";
+                        setTimeout(() => window.location.href = '/', 2000);
+                    }
+                } catch (e) {}
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

@@ -4,9 +4,14 @@ import os
 import asyncio
 import base64
 
+# Define paths relative to this file
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+
 app = Flask(__name__, 
-            template_folder="../../whatsapp_ui/templates",
-            static_folder="../../whatsapp_ui/static")
+            template_folder=TEMPLATE_DIR,
+            static_folder=STATIC_DIR)
 
 # Shared state
 hass_instance = None

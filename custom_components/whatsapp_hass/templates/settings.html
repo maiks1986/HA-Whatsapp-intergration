@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - WhatsApp Control Center</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; background-color: #f0f2f5; }
+        .container { max-width: 800px; margin: auto; padding: 20px; }
+        h1 { color: #1c1e21; }
+        .card { background-color: white; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+        .form-group { margin-bottom: 12px; }
+        label { display: block; font-weight: 600; margin-bottom: 4px; color: #606770; }
+        input { width: 100%; padding: 8px; border: 1px solid #dddfe2; border-radius: 6px; box-sizing: border-box; }
+        button { background-color: #1877f2; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; }
+        button:hover { background-color: #166fe5; }
+        .back-link { display: inline-block; margin-bottom: 15px; color: #1877f2; text-decoration: none; }
+        .back-link:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="back-link">← Back to Dashboard</a>
+        <h1>Settings</h1>
+
+        <div class="card">
+            <h2>Configuration</h2>
+            <form id="settingsForm">
+                <div class="form-group">
+                    <label for="ha_url">Home Assistant URL</label>
+                    <input type="text" id="ha_url" name="ha_url" placeholder="http://192.168.1.5:8123" required>
+                </div>
+                <div class="form-group">
+                    <label for="ha_token">Home Assistant Long-Lived Access Token</label>
+                    <input type="password" id="ha_token" name="ha_token" placeholder="eyJ..." required>
+                </div>
+                <div class="form-group">
+                    <label for="gemini_api_key">Gemini API Key</label>
+                    <input type="password" id="gemini_api_key" name="gemini_api_key" placeholder="AIza...">
+                </div>
+                <button type="submit">Save Settings</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Load existing settings on page load
+        async function loadSettings() {
+            try {
+                const response = await fetch('/api/settings');
+                if (response.ok) {
+                    const settings = await response.json();
+                    document.getElementById('ha_url').value = settings.ha_url || '';
+                    document.getElementById('ha_token').value = settings.ha_token || '';
+                    document.getElementById('gemini_api_key').value = settings.gemini_api_key || '';
+                }
+            } catch (error) {
+                console.error('Error loading settings:', error);
+            }
+        }
+
+        document.getElementById('settingsForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const ha_url = document.getElementById('ha_url').value;
+            const ha_token = document.getElementById('ha_token').value;
+            const gemini_api_key = document.getElementById('gemini_api_key').value;
+
+            try {
+                const response = await fetch('/api/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ha_url, ha_token, gemini_api_key })
+                });
+                
+                if (response.ok) {
+                    alert('Settings saved successfully!');
+                } else {
+                    alert('Failed to save settings.');
+                }
+            } catch (error) {
+                console.error('Error saving settings:', error);
+                alert('An error occurred while saving settings.');
+            }
+        });
+
+        loadSettings();
+    </script>
+</body>
+</html>
