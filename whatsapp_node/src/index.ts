@@ -55,7 +55,7 @@ async function connectToWhatsApp() {
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
             connectionStatus = 'disconnected';
-            logger.info('Connection closed due to ', lastDisconnect?.error, ', reconnecting ', shouldReconnect);
+            logger.info({ error: lastDisconnect?.error }, `Connection closed, reconnecting: ${shouldReconnect}`);
             if (shouldReconnect) {
                 connectToWhatsApp();
             }
