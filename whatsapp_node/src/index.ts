@@ -87,7 +87,7 @@ async function bootstrap() {
 
     app.get('/api/instances', requireAuth, (req, res) => {
         const user = (req as any).haUser;
-        console.log(`API: Fetching instances for user ${user.id} (Admin: ${user.isAdmin})`);
+        console.log(`API: Fetching instances for user ${user.id}`);
         let instances;
         if (user.isAdmin) {
             instances = db.prepare('SELECT * FROM instances').all();
@@ -100,15 +100,17 @@ async function bootstrap() {
     app.get('/api/chats/:instanceId', requireAuth, (req, res) => {
         const { instanceId } = req.params;
         const user = (req as any).haUser;
+        console.log(`API: Fetching chats for instance ${instanceId} (User: ${user.id})`);
+        
         const instanceData = db.prepare('SELECT ha_user_id FROM instances WHERE id = ?').get(instanceId) as any;
         if (!user.isAdmin && instanceData?.ha_user_id !== user.id) return res.status(403).json({ error: "Access Denied" });
 
-        // Order by last message timestamp, but fallback to JID if null
         const chats = db.prepare(`
             SELECT * FROM chats 
             WHERE instance_id = ? 
             ORDER BY COALESCE(last_message_timestamp, '0000-00-00') DESC, jid ASC
         `).all(instanceId);
+        console.log(`API: Returning ${chats.length} chats`);
         res.json(chats);
     });
 
@@ -119,6 +121,7 @@ async function bootstrap() {
             chats: db.prepare('SELECT COUNT(*) as count FROM chats').get(),
             messages: db.prepare('SELECT COUNT(*) as count FROM messages').get(),
         };
+        console.log('API: Debug Stats requested', stats);
         res.json(stats);
     });
 
@@ -152,6 +155,32 @@ async function bootstrap() {
             await instance.sendMessage(contact, message);
             res.json({ success: true });
         } catch (e: any) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.post('/api/settings', requireAuth, (req, res) => {
+        const user = (req as any).haUser;
+        if (!user.isAdmin) return res.status(403).json({ error: "Admin only" });
+        const { key, value } = req.body;
+        db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, value);
+        if (key === 'gemini_api_key') aiService.reset();
+        res.json({ success: true });
+    });
+
+    app.get('/api/settings/:key', requireAuth, (req, res) => {
+        const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(req.params.key) as any;
+        res.json({ value: row?.value || "" });
+    });
+
+    app.post('/api/ai/analyze', requireAuth, async (req, res) => {
+        const { messages } = req.body;
+        const intent = await aiService.analyzeIntent(messages);
+        res.json({ intent });
+    });
+
+    app.post('/api/ai/draft', requireAuth, async (req, res) => {
+        const { messages, steer } = req.body;
+        const draft = await aiService.generateDraft(messages, steer);
+        res.json({ draft });
     });
 
     io.on('connection', (socket) => {

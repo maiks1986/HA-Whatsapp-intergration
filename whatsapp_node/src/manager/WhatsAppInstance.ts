@@ -4,7 +4,8 @@ import makeWASocket, {
     fetchLatestBaileysVersion, 
     WASocket,
     ConnectionState,
-    Browsers
+    Browsers,
+    Contact
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode';
@@ -39,8 +40,10 @@ export class WhatsAppInstance {
             auth: state,
             printQRInTerminal: false,
             browser: Browsers.ubuntu('Chrome'),
-            syncFullHistory: true, // Force full history sync
-            markOnlineOnConnect: true
+            syncFullHistory: true,
+            markOnlineOnConnect: true,
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 60000
         });
 
         this.sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
@@ -68,28 +71,37 @@ export class WhatsAppInstance {
                 
                 const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
                 if (shouldReconnect) {
-                    console.log(`Instance ${this.id}: Reconnecting...`);
-                    setTimeout(() => this.init(), 5000); // 5s delay before reconnect
+                    console.log(`Instance ${this.id}: Reconnecting in 5s...`);
+                    setTimeout(() => this.init(), 5000);
                 }
             }
         });
 
         this.sock.ev.on('creds.update', saveCreds);
 
-        // Track ALL events for debugging
+        const upsertChat = db.prepare(`
+            INSERT INTO chats (instance_id, jid, name, unread_count) 
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(instance_id, jid) DO UPDATE SET
+            name = CASE WHEN excluded.name IS NOT NULL AND excluded.name != '' THEN excluded.name ELSE chats.name END,
+            unread_count = excluded.unread_count
+        `);
+
+        // Track ALL events for debugging and robust discovery
         this.sock.ev.process(async (events) => {
             if (events['messaging-history.set']) {
                 const { chats, messages } = events['messaging-history.set'];
-                console.log(`Instance ${this.id}: Received history set. Chats: ${chats.length}, Messages: ${messages.length}`);
-                
-                const upsertChat = db.prepare(`
-                    INSERT INTO chats (instance_id, jid, name, unread_count) 
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(instance_id, jid) DO UPDATE SET
-                    name = CASE WHEN excluded.name IS NOT NULL THEN excluded.name ELSE chats.name END,
-                    unread_count = excluded.unread_count
-                `);
+                console.log(`Instance ${this.id}: [HistorySet] Syncing ${chats.length} chats`);
+                db.transaction(() => {
+                    for (const chat of chats) {
+                        upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0);
+                    }
+                })();
+            }
 
+            if (events['chats.set']) {
+                const { chats } = events['chats.set'];
+                console.log(`Instance ${this.id}: [ChatsSet] Received ${chats.length} chats`);
                 db.transaction(() => {
                     for (const chat of chats) {
                         upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0);
@@ -98,15 +110,26 @@ export class WhatsAppInstance {
             }
 
             if (events['chats.upsert']) {
-                console.log(`Instance ${this.id}: Chats upserted: ${events['chats.upsert'].length}`);
-                const upsertChat = db.prepare(`
-                    INSERT INTO chats (instance_id, jid, name) 
-                    VALUES (?, ?, ?)
-                    ON CONFLICT(instance_id, jid) DO UPDATE SET 
-                    name = CASE WHEN excluded.name IS NOT NULL THEN excluded.name ELSE chats.name END
-                `);
+                console.log(`Instance ${this.id}: [ChatsUpsert] ${events['chats.upsert'].length} items`);
                 for (const chat of events['chats.upsert']) {
-                    upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0]);
+                    upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], 0);
+                }
+            }
+
+            if (events['contacts.set']) {
+                const { contacts } = events['contacts.set'];
+                console.log(`Instance ${this.id}: [ContactsSet] Received ${contacts.length} contacts`);
+                db.transaction(() => {
+                    for (const contact of contacts) {
+                        upsertChat.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0], 0);
+                    }
+                })();
+            }
+
+            if (events['contacts.upsert']) {
+                console.log(`Instance ${this.id}: [ContactsUpsert] ${events['contacts.upsert'].length} items`);
+                for (const contact of events['contacts.upsert']) {
+                    upsertChat.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0], 0);
                 }
             }
 
@@ -120,23 +143,14 @@ export class WhatsAppInstance {
                         
                         if (text) {
                             const jid = msg.key.remoteJid!;
-                            console.log(`Instance ${this.id}: New message from ${jid}`);
+                            console.log(`Instance ${this.id}: Message received from ${jid}`);
                             
-                            // Save Message
                             db.prepare(`
                                 INSERT OR IGNORE INTO messages 
                                 (instance_id, chat_jid, sender_jid, sender_name, text, is_from_me) 
                                 VALUES (?, ?, ?, ?, ?, ?)
-                            `).run(
-                                this.id, 
-                                jid, 
-                                msg.key.participant || jid,
-                                msg.pushName || "Unknown",
-                                text,
-                                msg.key.fromMe ? 1 : 0
-                            );
+                            `).run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0);
 
-                            // Update Chat "Last Message"
                             db.prepare(`
                                 INSERT INTO chats (instance_id, jid, last_message_text, last_message_timestamp)
                                 VALUES (?, ?, ?, CURRENT_TIMESTAMP)
@@ -162,12 +176,9 @@ export class WhatsAppInstance {
         `).run(this.id, jid, 'me', 'Me', text, 1);
 
         db.prepare(`
-            INSERT INTO chats (instance_id, jid, last_message_text, last_message_timestamp)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(instance_id, jid) DO UPDATE SET
-            last_message_text = excluded.last_message_text,
-            last_message_timestamp = CURRENT_TIMESTAMP
-        `).run(this.id, jid, text);
+            UPDATE chats SET last_message_text = ?, last_message_timestamp = CURRENT_TIMESTAMP
+            WHERE instance_id = ? AND jid = ?
+        `).run(text, this.id, jid);
     }
 
     async close() {
