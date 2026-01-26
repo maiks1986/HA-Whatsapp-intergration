@@ -1,8 +1,8 @@
 ARG BUILD_FROM
 FROM $BUILD_FROM
 
-# Install Node.js
-RUN apk add --no-cache nodejs npm python3 make g++
+# Install Node.js and build tools
+RUN apk add --no-cache nodejs npm python3 make g++ git
 
 WORKDIR /app
 
