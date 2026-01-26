@@ -32,6 +32,20 @@ export function initDatabase() {
         )
     `);
 
+    // Chats Table
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS chats (
+            instance_id INTEGER,
+            jid TEXT,
+            name TEXT,
+            unread_count INTEGER DEFAULT 0,
+            last_message_text TEXT,
+            last_message_timestamp DATETIME,
+            PRIMARY KEY(instance_id, jid),
+            FOREIGN KEY(instance_id) REFERENCES instances(id)
+        )
+    `);
+
     // Messages Table
     db.exec(`
         CREATE TABLE IF NOT EXISTS messages (

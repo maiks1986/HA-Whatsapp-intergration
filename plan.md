@@ -5,8 +5,8 @@ Build a private, multi-instance, AI-powered WhatsApp CRM running natively on Hom
 
 ## 🏗 Architecture
 - **Backend:** Node.js + TypeScript + Baileys (Multi-device protocol)
-- **Database:** SQLite (Persistent storage for messages, users, and instances)
-- **Frontend:** React + Vite + Tailwind CSS (WhatsApp-style UI)
+- **Database:** SQLite (Persistent storage for messages, users, instances, and chats)
+- **Frontend:** React + Vite + Tailwind CSS (Full WhatsApp-style UI)
 - **AI:** Google Gemini 1.5 Flash (Intent analysis and reply drafting)
 - **Security:** Home Assistant Native Ingress (Auto-Auth & Multi-User) + Direct Access Password
 
@@ -15,22 +15,22 @@ Build a private, multi-instance, AI-powered WhatsApp CRM running natively on Hom
 ## 🚦 Roadmap
 
 ### ✅ Phase 1: Database & Multi-Instance Core (COMPLETED v1.1.0)
-- [x] SQLite schema design (`users`, `instances`, `messages`).
+- [x] SQLite schema design (`users`, `instances`, `messages`, `chats`).
 - [x] Multi-Instance Manager logic.
 - [x] Persistent message logging.
 
-### ✅ Phase 2: The "WhatsApp Pro" UI (COMPLETED v1.1.1)
+### ✅ Phase 2: The "WhatsApp Pro" UI (COMPLETED v1.1.7)
 - [x] Implement Tailwind CSS for professional styling.
-- [x] Create Dual-Pane layout (Sidebar for chats, Main for messages).
-- [x] Build Instance Switcher (sidebar).
-- [x] Implement Chat Controls (Clear button, AI Draft field).
+- [x] Dual-Pane layout (Sidebar for chats, Main for messages).
+- [x] Real-time chat list synchronization with unread counts.
+- [x] Chat Switcher and history loading.
 
-### ✅ Phase 3: Gemini AI Integration (COMPLETED v1.1.2)
+### ✅ Phase 3: Gemini AI Integration (COMPLETED v1.1.7)
 - [x] Settings page for Gemini API Keys.
 - [x] Intent Analysis Engine (last 20 messages).
 - [x] Smart Suggestion Engine with "Steer" functionality.
 
-### ✅ Phase 4: Auth & Security (COMPLETED v1.1.2)
+### ✅ Phase 4: Auth & Security (COMPLETED v1.1.7)
 - [x] Home Assistant Ingress integration (Skip login screen).
 - [x] Identity Mapping (Bind instances to HA User IDs).
 - [x] Direct Access Password protection.
@@ -38,4 +38,4 @@ Build a private, multi-instance, AI-powered WhatsApp CRM running natively on Hom
 ---
 
 ## 📝 Current Status
-The "WhatsApp Pro" system is feature-complete. Currently fixing minor build issues in the React frontend.
+The "WhatsApp Pro" system is feature-complete. All core functionalities (Multi-instance, Chat History, AI, and Security) are implemented and verified.

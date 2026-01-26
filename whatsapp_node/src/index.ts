@@ -97,6 +97,16 @@ async function bootstrap() {
         res.json(instances);
     });
 
+    app.get('/api/chats/:instanceId', requireAuth, (req, res) => {
+        const { instanceId } = req.params;
+        const user = (req as any).haUser;
+        const instanceData = db.prepare('SELECT ha_user_id FROM instances WHERE id = ?').get(instanceId) as any;
+        if (!user.isAdmin && instanceData?.ha_user_id !== user.id) return res.status(403).json({ error: "Access Denied" });
+
+        const chats = db.prepare('SELECT * FROM chats WHERE instance_id = ? ORDER BY last_message_timestamp DESC').all(instanceId);
+        res.json(chats);
+    });
+
     app.post('/api/instances', requireAuth, async (req, res) => {
         const { name } = req.body;
         const user = (req as any).haUser;

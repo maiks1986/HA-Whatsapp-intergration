@@ -67,6 +67,32 @@ export class WhatsAppInstance {
 
         this.sock.ev.on('creds.update', saveCreds);
 
+        // Sync Chats
+        this.sock.ev.on('messaging-history.set', ({ chats }) => {
+            console.log(`Instance ${this.id}: Syncing ${chats.length} chats from history`);
+            const upsertChat = db.prepare(`
+                INSERT INTO chats (instance_id, jid, name, unread_count) 
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(instance_id, jid) DO UPDATE SET
+                name = excluded.name,
+                unread_count = excluded.unread_count
+            `);
+            for (const chat of chats) {
+                upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0);
+            }
+        });
+
+        this.sock.ev.on('chats.upsert', (chats) => {
+            const upsertChat = db.prepare(`
+                INSERT INTO chats (instance_id, jid, name) 
+                VALUES (?, ?, ?)
+                ON CONFLICT(instance_id, jid) DO UPDATE SET name = excluded.name
+            `);
+            for (const chat of chats) {
+                upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0]);
+            }
+        });
+
         this.sock.ev.on('messages.upsert', async m => {
             if (m.type === 'notify') {
                 for (const msg of m.messages) {
@@ -75,18 +101,29 @@ export class WhatsAppInstance {
                                  msg.message?.imageMessage?.caption || "";
                     
                     if (text) {
+                        const jid = msg.key.remoteJid!;
+                        // Save Message
                         db.prepare(`
                             INSERT OR IGNORE INTO messages 
                             (instance_id, chat_jid, sender_jid, sender_name, text, is_from_me) 
                             VALUES (?, ?, ?, ?, ?, ?)
                         `).run(
                             this.id, 
-                            msg.key.remoteJid, 
-                            msg.key.participant || msg.key.remoteJid,
+                            jid, 
+                            msg.key.participant || jid,
                             msg.pushName || "Unknown",
                             text,
                             msg.key.fromMe ? 1 : 0
                         );
+
+                        // Update Chat "Last Message"
+                        db.prepare(`
+                            INSERT INTO chats (instance_id, jid, last_message_text, last_message_timestamp)
+                            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                            ON CONFLICT(instance_id, jid) DO UPDATE SET
+                            last_message_text = excluded.last_message_text,
+                            last_message_timestamp = CURRENT_TIMESTAMP
+                        `).run(this.id, jid, text);
                     }
                 }
             }
@@ -96,6 +133,18 @@ export class WhatsAppInstance {
     async sendMessage(jid: string, text: string) {
         if (!this.sock || this.status !== 'connected') throw new Error("Instance not connected");
         await this.sock.sendMessage(jid, { text });
+        
+        // Log outgoing message to DB
+        db.prepare(`
+            INSERT OR IGNORE INTO messages 
+            (instance_id, chat_jid, sender_jid, sender_name, text, is_from_me) 
+            VALUES (?, ?, ?, ?, ?, ?)
+        `).run(this.id, jid, 'me', 'Me', text, 1);
+
+        db.prepare(`
+            UPDATE chats SET last_message_text = ?, last_message_timestamp = CURRENT_TIMESTAMP
+            WHERE instance_id = ? AND jid = ?
+        `).run(text, this.id, jid);
     }
 
     async close() {
