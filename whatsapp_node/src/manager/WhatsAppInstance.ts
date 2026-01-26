@@ -3,7 +3,8 @@ import makeWASocket, {
     useMultiFileAuthState, 
     fetchLatestBaileysVersion, 
     WASocket,
-    ConnectionState
+    ConnectionState,
+    Browsers
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode';
@@ -31,10 +32,15 @@ export class WhatsAppInstance {
         const { state, saveCreds } = await useMultiFileAuthState(this.authPath);
         const { version } = await fetchLatestBaileysVersion();
 
+        console.log(`Instance ${this.id}: Initializing with Baileys v${version.join('.')}`);
+
         this.sock = makeWASocket({
             version,
             auth: state,
-            printQRInTerminal: false
+            printQRInTerminal: false,
+            browser: Browsers.ubuntu('Chrome'),
+            syncFullHistory: true, // Force full history sync
+            markOnlineOnConnect: true
         });
 
         this.sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
@@ -54,76 +60,91 @@ export class WhatsAppInstance {
             }
 
             if (connection === 'close') {
-                console.log(`Instance ${this.id}: Connection closed`);
+                const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+                console.log(`Instance ${this.id}: Connection closed. Status: ${statusCode}`);
+                
                 this.status = 'disconnected';
                 db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
-                const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
+                
+                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
                 if (shouldReconnect) {
                     console.log(`Instance ${this.id}: Reconnecting...`);
-                    this.init();
+                    setTimeout(() => this.init(), 5000); // 5s delay before reconnect
                 }
             }
         });
 
         this.sock.ev.on('creds.update', saveCreds);
 
-        // Sync Chats
-        this.sock.ev.on('messaging-history.set', ({ chats }) => {
-            console.log(`Instance ${this.id}: Syncing ${chats.length} chats from history`);
-            const upsertChat = db.prepare(`
-                INSERT INTO chats (instance_id, jid, name, unread_count) 
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(instance_id, jid) DO UPDATE SET
-                name = excluded.name,
-                unread_count = excluded.unread_count
-            `);
-            for (const chat of chats) {
-                upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0);
+        // Track ALL events for debugging
+        this.sock.ev.process(async (events) => {
+            if (events['messaging-history.set']) {
+                const { chats, messages } = events['messaging-history.set'];
+                console.log(`Instance ${this.id}: Received history set. Chats: ${chats.length}, Messages: ${messages.length}`);
+                
+                const upsertChat = db.prepare(`
+                    INSERT INTO chats (instance_id, jid, name, unread_count) 
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(instance_id, jid) DO UPDATE SET
+                    name = CASE WHEN excluded.name IS NOT NULL THEN excluded.name ELSE chats.name END,
+                    unread_count = excluded.unread_count
+                `);
+
+                db.transaction(() => {
+                    for (const chat of chats) {
+                        upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0);
+                    }
+                })();
             }
-        });
 
-        this.sock.ev.on('chats.upsert', (chats) => {
-            const upsertChat = db.prepare(`
-                INSERT INTO chats (instance_id, jid, name) 
-                VALUES (?, ?, ?)
-                ON CONFLICT(instance_id, jid) DO UPDATE SET name = excluded.name
-            `);
-            for (const chat of chats) {
-                upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0]);
+            if (events['chats.upsert']) {
+                console.log(`Instance ${this.id}: Chats upserted: ${events['chats.upsert'].length}`);
+                const upsertChat = db.prepare(`
+                    INSERT INTO chats (instance_id, jid, name) 
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(instance_id, jid) DO UPDATE SET 
+                    name = CASE WHEN excluded.name IS NOT NULL THEN excluded.name ELSE chats.name END
+                `);
+                for (const chat of events['chats.upsert']) {
+                    upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0]);
+                }
             }
-        });
 
-        this.sock.ev.on('messages.upsert', async m => {
-            if (m.type === 'notify') {
-                for (const msg of m.messages) {
-                    const text = msg.message?.conversation || 
-                                 msg.message?.extendedTextMessage?.text || 
-                                 msg.message?.imageMessage?.caption || "";
-                    
-                    if (text) {
-                        const jid = msg.key.remoteJid!;
-                        // Save Message
-                        db.prepare(`
-                            INSERT OR IGNORE INTO messages 
-                            (instance_id, chat_jid, sender_jid, sender_name, text, is_from_me) 
-                            VALUES (?, ?, ?, ?, ?, ?)
-                        `).run(
-                            this.id, 
-                            jid, 
-                            msg.key.participant || jid,
-                            msg.pushName || "Unknown",
-                            text,
-                            msg.key.fromMe ? 1 : 0
-                        );
+            if (events['messages.upsert']) {
+                const { messages: newMsgs, type } = events['messages.upsert'];
+                if (type === 'notify') {
+                    for (const msg of newMsgs) {
+                        const text = msg.message?.conversation || 
+                                     msg.message?.extendedTextMessage?.text || 
+                                     msg.message?.imageMessage?.caption || "";
+                        
+                        if (text) {
+                            const jid = msg.key.remoteJid!;
+                            console.log(`Instance ${this.id}: New message from ${jid}`);
+                            
+                            // Save Message
+                            db.prepare(`
+                                INSERT OR IGNORE INTO messages 
+                                (instance_id, chat_jid, sender_jid, sender_name, text, is_from_me) 
+                                VALUES (?, ?, ?, ?, ?, ?)
+                            `).run(
+                                this.id, 
+                                jid, 
+                                msg.key.participant || jid,
+                                msg.pushName || "Unknown",
+                                text,
+                                msg.key.fromMe ? 1 : 0
+                            );
 
-                        // Update Chat "Last Message"
-                        db.prepare(`
-                            INSERT INTO chats (instance_id, jid, last_message_text, last_message_timestamp)
-                            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                            ON CONFLICT(instance_id, jid) DO UPDATE SET
-                            last_message_text = excluded.last_message_text,
-                            last_message_timestamp = CURRENT_TIMESTAMP
-                        `).run(this.id, jid, text);
+                            // Update Chat "Last Message"
+                            db.prepare(`
+                                INSERT INTO chats (instance_id, jid, last_message_text, last_message_timestamp)
+                                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                                ON CONFLICT(instance_id, jid) DO UPDATE SET
+                                last_message_text = excluded.last_message_text,
+                                last_message_timestamp = CURRENT_TIMESTAMP
+                            `).run(this.id, jid, text);
+                        }
                     }
                 }
             }
@@ -134,7 +155,6 @@ export class WhatsAppInstance {
         if (!this.sock || this.status !== 'connected') throw new Error("Instance not connected");
         await this.sock.sendMessage(jid, { text });
         
-        // Log outgoing message to DB
         db.prepare(`
             INSERT OR IGNORE INTO messages 
             (instance_id, chat_jid, sender_jid, sender_name, text, is_from_me) 
@@ -142,9 +162,12 @@ export class WhatsAppInstance {
         `).run(this.id, jid, 'me', 'Me', text, 1);
 
         db.prepare(`
-            UPDATE chats SET last_message_text = ?, last_message_timestamp = CURRENT_TIMESTAMP
-            WHERE instance_id = ? AND jid = ?
-        `).run(text, this.id, jid);
+            INSERT INTO chats (instance_id, jid, last_message_text, last_message_timestamp)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(instance_id, jid) DO UPDATE SET
+            last_message_text = excluded.last_message_text,
+            last_message_timestamp = CURRENT_TIMESTAMP
+        `).run(this.id, jid, text);
     }
 
     async close() {

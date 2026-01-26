@@ -103,8 +103,23 @@ async function bootstrap() {
         const instanceData = db.prepare('SELECT ha_user_id FROM instances WHERE id = ?').get(instanceId) as any;
         if (!user.isAdmin && instanceData?.ha_user_id !== user.id) return res.status(403).json({ error: "Access Denied" });
 
-        const chats = db.prepare('SELECT * FROM chats WHERE instance_id = ? ORDER BY last_message_timestamp DESC').all(instanceId);
+        // Order by last message timestamp, but fallback to JID if null
+        const chats = db.prepare(`
+            SELECT * FROM chats 
+            WHERE instance_id = ? 
+            ORDER BY COALESCE(last_message_timestamp, '0000-00-00') DESC, jid ASC
+        `).all(instanceId);
         res.json(chats);
+    });
+
+    app.get('/api/debug/stats', requireAuth, (req, res) => {
+        const stats = {
+            users: db.prepare('SELECT COUNT(*) as count FROM users').get(),
+            instances: db.prepare('SELECT COUNT(*) as count FROM instances').get(),
+            chats: db.prepare('SELECT COUNT(*) as count FROM chats').get(),
+            messages: db.prepare('SELECT COUNT(*) as count FROM messages').get(),
+        };
+        res.json(stats);
     });
 
     app.post('/api/instances', requireAuth, async (req, res) => {
