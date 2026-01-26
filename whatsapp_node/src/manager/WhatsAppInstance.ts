@@ -82,24 +82,30 @@ export class WhatsAppInstance {
                         this.status = 'connected';
                         this.qr = null;
                         db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
-
-                        // Aggressive Subscription for sync data
-                        if (this.sock) {
-                            (this.sock as any).upsertMessageFeedback({ remoteJid: 'status@broadcast', participant: 'me', key: { id: 'sync' } } as any);
-                        }
                         
                         this.startSyncWatchdog();
                     }
                     if (connection === 'close') {
                         const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+                        console.log(`TRACE [Instance ${this.id}]: Connection CLOSED (Status: ${statusCode})`);
                         this.status = 'disconnected';
                         this.sock = null;
                         this.stopSyncWatchdog();
+                        
                         db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
-                        if (statusCode !== DisconnectReason.loggedOut) {
+                        
+                        if (statusCode === DisconnectReason.loggedOut) {
+                            console.log(`TRACE [Instance ${this.id}]: Session logged out. Clearing auth and forcing new QR...`);
+                            await this.deleteAuth();
+                            await this.init();
+                        } else {
                             if (this.isReconnecting) return;
                             this.isReconnecting = true;
-                            setTimeout(async () => { this.isReconnecting = false; await this.init(); }, 5000);
+                            console.log(`TRACE [Instance ${this.id}]: Reconnecting in 5s...`);
+                            setTimeout(async () => {
+                                this.isReconnecting = false;
+                                await this.init();
+                            }, 5000);
                         }
                     }
                 }
