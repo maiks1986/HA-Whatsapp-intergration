@@ -74,7 +74,7 @@ export class WhatsAppInstance {
                     const update = events['connection.update'];
                     const { connection, lastDisconnect, qr } = update;
                     if (qr) {
-                        this.qr = qrcode.toDataURL(qr) as any;
+                        this.qr = await qrcode.toDataURL(qr);
                         this.status = 'qr_ready';
                     }
                     if (connection === 'open') {
