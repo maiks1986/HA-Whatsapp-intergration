@@ -69,7 +69,7 @@ export class WhatsAppInstance {
                 logger: logger as any
             });
 
-            this.sock.ev.process((events) => {
+            this.sock.ev.process(async (events) => {
                 if (events['connection.update']) {
                     const update = events['connection.update'];
                     const { connection, lastDisconnect, qr } = update;
