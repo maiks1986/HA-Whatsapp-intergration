@@ -1,24 +1,24 @@
-FROM node:20-alpine
+# Stage 1: Build Frontend
+FROM node:20-alpine AS build-frontend
+WORKDIR /app/frontend
+COPY frontend/package.json frontend/tsconfig.json frontend/vite.config.ts ./
+COPY frontend/index.html ./
+COPY frontend/src ./src
+RUN npm install && npm run build
 
-# Install build tools and git (needed for some npm packages)
+# Stage 2: Build Backend & Serve
+FROM node:20-alpine
 RUN apk add --no-cache python3 make g++ git
 
 WORKDIR /app
-
-# Copy package files
 COPY package.json tsconfig.json ./
-
-# Install dependencies
 RUN npm install
 
-# Copy source code
-COPY src/ ./src/
-
-# Build TypeScript to JavaScript
+COPY src ./src
 RUN npm run build
 
-# Expose the API port
-EXPOSE 5002
+# Copy built frontend assets to backend dist/public
+COPY --from=build-frontend /app/dist/public ./dist/public
 
-# Run the compiled code
+EXPOSE 5002
 CMD ["npm", "start"]

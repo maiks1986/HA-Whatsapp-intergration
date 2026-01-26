@@ -22,14 +22,28 @@ const io = new SocketServer(server, { cors: { origin: "*" } });
 app.use(cors());
 app.use(express.json());
 
+// Serve static React files
+const PUBLIC_PATH = path.join(__dirname, 'public');
+app.use(express.static(PUBLIC_PATH));
+
 const PORT = 5002;
-const AUTH_PATH = path.join(__dirname, '../auth_info');
+const AUTH_PATH = '/data/auth_info';
 
 let sock: WASocket | null = null;
 let qrData: string | null = null;
 let connectionStatus: 'connecting' | 'connected' | 'disconnected' = 'disconnected';
 
+interface LocalMessage {
+    account: string;
+    chat_name: string;
+    sender: string;
+    text: string;
+    timestamp: string;
+}
+let messageHistory: LocalMessage[] = [];
+
 async function connectToWhatsApp() {
+    connectionStatus = 'connecting';
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_PATH);
     const { version } = await fetchLatestBaileysVersion();
 
@@ -48,21 +62,18 @@ async function connectToWhatsApp() {
         
         if (qr) {
             qrData = qr;
-            logger.info('New QR Code generated');
-            io.emit('qr', await qrcode.toDataURL(qr));
+            const qrUrl = await qrcode.toDataURL(qr);
+            io.emit('qr', qrUrl);
         }
 
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
             connectionStatus = 'disconnected';
-            logger.info({ error: lastDisconnect?.error }, `Connection closed, reconnecting: ${shouldReconnect}`);
-            if (shouldReconnect) {
-                connectToWhatsApp();
-            }
+            qrData = null;
+            if (shouldReconnect) connectToWhatsApp();
         } else if (connection === 'open') {
             connectionStatus = 'connected';
             qrData = null;
-            logger.info('Opened connection');
             io.emit('status', 'connected');
         }
     });
@@ -72,9 +83,18 @@ async function connectToWhatsApp() {
     sock.ev.on('messages.upsert', async m => {
         if (m.type === 'notify') {
             for (const msg of m.messages) {
-                if (!msg.key.fromMe) {
-                    logger.info(`Received message from ${msg.key.remoteJid}: ${msg.message?.conversation}`);
-                    // Here we can push to HA webhook
+                const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
+                if (text) {
+                    const localMsg: LocalMessage = {
+                        account: "Primary",
+                        chat_name: msg.key.remoteJid || "Unknown",
+                        sender: msg.pushName || "Unknown",
+                        text: text,
+                        timestamp: new Date().toLocaleTimeString()
+                    };
+                    messageHistory.unshift(localMsg);
+                    if(messageHistory.length > 50) messageHistory.pop();
+                    io.emit('new_message', localMsg);
                 }
             }
         }
@@ -83,52 +103,35 @@ async function connectToWhatsApp() {
 
 // --- API Endpoints ---
 
-app.get('/status', (req, res) => {
-    res.json({ status: connectionStatus, has_qr: !!qrData });
+app.get('/api/account_status', (req, res) => {
+    res.json([{ account: "Primary", status: connectionStatus, last_seen: new Date().toISOString() }]);
 });
 
-app.post('/send', async (req, res) => {
-    const { jid, message } = req.body;
+app.get('/api/messages', (req, res) => {
+    res.json(messageHistory);
+});
+
+app.post('/api/send_message', async (req, res) => {
+    const { contact, message } = req.body;
     if (!sock || connectionStatus !== 'connected') {
         return res.status(500).json({ error: 'WhatsApp not connected' });
     }
     try {
-        const result = await sock.sendMessage(jid, { text: message });
-        res.json({ success: true, result });
+        let jid = contact;
+        if (!jid.includes('@')) jid = `${jid}@s.whatsapp.net`;
+        await sock.sendMessage(jid, { text: message });
+        res.json({ success: true });
     } catch (e: any) {
         res.status(500).json({ error: e.message });
     }
 });
 
-// Simple UI to show QR
-app.get('/', (req, res) => {
-    res.send(`
-        <html>
-            <head><title>WhatsApp Node Gateway</title></head>
-            <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-                <h1>WhatsApp Node Engine</h1>
-                <div id="status">Status: ${connectionStatus}</div>
-                <div id="qr-container" style="margin-top: 20px;">
-                    ${qrData ? '<h3>Scan this QR Code:</h3><div id="qrcode"></div>' : '<h3>Connected!</h3>'}
-                </div>
-                <script src="/socket.io/socket.io.js"></script>
-                <script>
-                    const socket = io();
-                    const qrDiv = document.getElementById('qrcode');
-                    socket.on('qr', (url) => {
-                        qrDiv.innerHTML = '<img src="' + url + '" />';
-                    });
-                    socket.on('status', (s) => {
-                        document.getElementById('status').innerText = 'Status: ' + s;
-                        if(s === 'connected') document.getElementById('qr-container').innerHTML = '<h3>Connected!</h3>';
-                    });
-                </script>
-            </body>
-        </html>
-    `);
+// Fallback to React index.html for all other routes
+app.get('*', (req, res) => {
+    res.sendFile(path.join(PUBLIC_PATH, 'index.html'));
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
     logger.info(`WhatsApp Node Engine listening on port ${PORT}`);
     connectToWhatsApp();
 });
