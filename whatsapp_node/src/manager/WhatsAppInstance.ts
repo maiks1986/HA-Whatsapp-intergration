@@ -182,22 +182,16 @@ export class WhatsAppInstance {
                                 
                                 insertMessage.run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
 
+                                db.prepare(`
+                                    UPDATE chats SET last_message_text = ?, last_message_timestamp = ?
+                                    WHERE instance_id = ? AND jid = ?
+                                `).run(text, ts, this.id, jid);
+                            }
                         }
                     }
-                });
-            }
-
-            // Legacy direct listeners (some versions of baileys prefer these)
-            if (this.sock) {
-                (this.sock.ev as any).on('contacts.set', (payload: any) => {
-                    const contacts = payload.contacts || [];
-                    console.log(`TRACE [Instance ${this.id}]: contacts.set -> ${contacts.length} items`);
-                    if (contacts.length > 0) this.syncRetryCount = 0;
-                    for (const contact of contacts) {
-                        upsertChat.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0], 0, null);
-                    }
-                });
-            }
+                }
+            });
+        }
         } catch (err) {
             console.error(`TRACE [Instance ${this.id}]: FATAL ERROR during init:`, err);
         }
