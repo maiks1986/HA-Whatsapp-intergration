@@ -3,7 +3,8 @@ import makeWASocket, {
     useMultiFileAuthState, 
     fetchLatestBaileysVersion, 
     makeCacheableSignalKeyStore,
-    WASocket
+    WASocket,
+    proto
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import express from 'express';
@@ -13,6 +14,7 @@ import qrcode from 'qrcode';
 import pino from 'pino';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 
 const logger = pino({ level: 'info' });
 const app = express();
@@ -43,7 +45,9 @@ interface LocalMessage {
 let messageHistory: LocalMessage[] = [];
 
 async function connectToWhatsApp() {
+    logger.info('Initializing WhatsApp connection...');
     connectionStatus = 'connecting';
+    
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_PATH);
     const { version } = await fetchLatestBaileysVersion();
 
@@ -53,7 +57,6 @@ async function connectToWhatsApp() {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, logger),
         },
-        printQRInTerminal: true,
         logger: logger as any,
     });
 
@@ -83,18 +86,23 @@ async function connectToWhatsApp() {
     sock.ev.on('messages.upsert', async m => {
         if (m.type === 'notify') {
             for (const msg of m.messages) {
-                const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || "";
-                if (text) {
+                const text = msg.message?.conversation || 
+                             msg.message?.extendedTextMessage?.text || 
+                             msg.message?.imageMessage?.caption || 
+                             "";
+                
+                if (text || msg.message) {
                     const localMsg: LocalMessage = {
                         account: "Primary",
                         chat_name: msg.key.remoteJid || "Unknown",
                         sender: msg.pushName || "Unknown",
-                        text: text,
+                        text: text || "[Media/Other Message]",
                         timestamp: new Date().toLocaleTimeString()
                     };
                     messageHistory.unshift(localMsg);
-                    if(messageHistory.length > 50) messageHistory.pop();
+                    if(messageHistory.length > 100) messageHistory.pop();
                     io.emit('new_message', localMsg);
+                    logger.info(`Message saved: ${localMsg.text}`);
                 }
             }
         }
@@ -126,9 +134,19 @@ app.post('/api/send_message', async (req, res) => {
     }
 });
 
-// Fallback to React index.html for all other routes
+// Debug endpoint for logs
+app.get('/api/logs', (req, res) => {
+    // This is just a placeholder, real logs are in stdout
+    res.json({ info: "Logs are available in the Home Assistant Add-on logs tab." });
+});
+
+// Fallback to React index.html
 app.get('*', (req, res) => {
-    res.sendFile(path.join(PUBLIC_PATH, 'index.html'));
+    if (fs.existsSync(path.join(PUBLIC_PATH, 'index.html'))) {
+        res.sendFile(path.join(PUBLIC_PATH, 'index.html'));
+    } else {
+        res.send("<h1>Engine Running</h1><p>Frontend build still in progress or not found.</p>");
+    }
 });
 
 server.listen(PORT, '0.0.0.0', () => {
