@@ -1,7 +1,6 @@
 import voluptuous as vol
 from homeassistant import config_entries, core
 from .const import DOMAIN
-from .whatsapp_web_client import WhatsAppWebClient
 import logging
 import os
 
@@ -28,6 +27,8 @@ class WhatsAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }),
             )
 
+        from .whatsapp_web_client import WhatsAppWebClient
+        
         self.account_name = user_input["name"]
         self.monitor_only = user_input.get("monitor_only", False)
         

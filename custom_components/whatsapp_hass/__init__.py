@@ -6,7 +6,6 @@ import datetime
 import requests
 import re
 from .const import DOMAIN
-from .whatsapp_web_client import WhatsAppWebClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,6 +17,8 @@ HISTORY_URL = f"{WEB_UI_BASE}/api/upload_history"
 
 async def async_setup_entry(hass, entry):
     """Set up WhatsApp from a config entry."""
+    from .whatsapp_web_client import WhatsAppWebClient
+    
     hass.data.setdefault(DOMAIN, {})
     
     user_data_dir = entry.data["user_data_dir"]
@@ -107,7 +108,11 @@ async def run_client(client, hass, entry):
     loop = asyncio.get_event_loop()
     account_name = entry.data["name"]
     log_dir = hass.config.path(f"whatsapp_logs/{account_name}")
-    await loop.run_in_executor(None, os.makedirs, log_dir, exist_ok=True)
+    
+    def _create_dir():
+        os.makedirs(log_dir, exist_ok=True)
+        
+    await loop.run_in_executor(None, _create_dir)
     
     monitor_only = entry.data.get("monitor_only", False)
     
