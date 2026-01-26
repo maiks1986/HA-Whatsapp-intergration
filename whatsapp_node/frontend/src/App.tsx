@@ -5,7 +5,6 @@ import {
   Send, 
   Plus, 
   User, 
-  Trash2, 
   Sparkles, 
   RefreshCw, 
   CircleDot,

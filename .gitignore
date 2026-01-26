@@ -18,6 +18,8 @@ whatsapp_logs/
 *.crdownload
 whatsapp.db
 config.json
+node_modules/
+dist/
 
 # Web UI
 whatsapp_ui/whatsapp.db
@@ -27,3 +29,8 @@ whatsapp_ui/config.json
 .env
 start_gemini_yolo.bat
 GEMINI.md
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
