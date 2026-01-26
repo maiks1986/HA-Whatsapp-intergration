@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import axios from 'axios';
-import { Send, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Send, CheckCircle2, RefreshCw } from 'lucide-react';
 
 const socket = io();
 
