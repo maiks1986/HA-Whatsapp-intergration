@@ -1,5 +1,5 @@
 name: "WhatsApp Node Engine"
-version: "1.1.4"
+version: "1.1.5"
 slug: "whatsapp_node_engine"
 description: "Browserless WhatsApp Engine with AI and Native HA Auth"
 arch:
@@ -18,3 +18,5 @@ ingress: true
 ingress_port: 5002
 panel_icon: mdi:whatsapp
 panel_title: WhatsApp
+ports:
+  5002/tcp: 5002
