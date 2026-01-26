@@ -8,7 +8,7 @@ Build a private, multi-instance, AI-powered WhatsApp CRM running natively on Hom
 - **Database:** SQLite (Persistent storage for messages, users, and instances)
 - **Frontend:** React + Vite + Tailwind CSS (WhatsApp-style UI)
 - **AI:** Google Gemini 1.5 Flash (Intent analysis and reply drafting)
-- **Security:** Home Assistant Native Ingress (Auto-Auth & Multi-User)
+- **Security:** Home Assistant Native Ingress (Auto-Auth & Multi-User) + Direct Access Password
 
 ---
 
@@ -33,9 +33,9 @@ Build a private, multi-instance, AI-powered WhatsApp CRM running natively on Hom
 ### ✅ Phase 4: Auth & Security (COMPLETED v1.1.2)
 - [x] Home Assistant Ingress integration (Skip login screen).
 - [x] Identity Mapping (Bind instances to HA User IDs).
-- [x] Admin vs User privacy logic.
+- [x] Direct Access Password protection.
 
 ---
 
 ## 📝 Current Status
-The "WhatsApp Pro" system is now feature-complete for the core vision. It is a secure, multi-user, AI-assisted WhatsApp dashboard running entirely on your Raspberry Pi.
+The "WhatsApp Pro" system is feature-complete. Currently fixing minor build issues in the React frontend.
