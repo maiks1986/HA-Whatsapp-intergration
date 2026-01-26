@@ -1,7 +1,7 @@
 # Stage 1: Build Frontend
 FROM node:20-alpine AS build-frontend
 WORKDIR /app/frontend
-COPY frontend/package.json frontend/tsconfig.json frontend/vite.config.ts ./
+COPY frontend/package.json frontend/tsconfig.json frontend/tsconfig.node.json frontend/vite.config.ts ./
 COPY frontend/index.html ./
 COPY frontend/src ./src
 RUN npm install && npm run build
