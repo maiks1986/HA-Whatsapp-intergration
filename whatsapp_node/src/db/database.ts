@@ -25,6 +25,7 @@ export function initDatabase() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             owner_id INTEGER,
+            ha_user_id TEXT,
             status TEXT DEFAULT 'disconnected',
             last_seen DATETIME,
             FOREIGN KEY(owner_id) REFERENCES users(id)

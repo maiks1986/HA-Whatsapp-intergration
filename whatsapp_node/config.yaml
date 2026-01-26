@@ -1,7 +1,7 @@
 name: "WhatsApp Node Engine"
-version: "1.1.1"
+version: "1.1.2"
 slug: "whatsapp_node_engine"
-description: "Browserless WhatsApp Engine using TypeScript and Baileys"
+description: "Browserless WhatsApp Engine with AI and Native HA Auth"
 arch:
   - aarch64
   - amd64
@@ -12,5 +12,7 @@ map:
   - config:rw
 options: {}
 schema: {}
-ports:
-  5002/tcp: 5002
+ingress: true
+ingress_port: 5002
+panel_icon: mdi:whatsapp
+panel_title: WhatsApp

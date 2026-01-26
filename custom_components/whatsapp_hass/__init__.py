@@ -1,7 +1,6 @@
 """The WhatsApp Home Assistant Bridge."""
 import logging
 import requests
-import voluptuous as vol
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from .const import DOMAIN
@@ -12,24 +11,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Set up WhatsApp Bridge from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     
-    # We assume the Node engine is running on port 5002 on the same host (the Pi)
+    # Internal Add-on URL
     engine_url = "http://127.0.0.1:5002"
 
     async def handle_send_message(call):
         """Send message via Node.js Engine."""
         contact = call.data.get("contact")
         message = call.data.get("message")
+        instance_id = call.data.get("instance_id", 1) # Default to first instance
         
-        # JID format for WhatsApp is usually number@s.whatsapp.net
-        # We'll do a simple conversion if it's just a number
         jid = contact
         if "@" not in jid:
             jid = f"{jid}@s.whatsapp.net"
 
         try:
+            # We skip HA headers here as it's an internal server-to-server call
             response = await hass.async_add_executor_job(
                 lambda: requests.post(f"{engine_url}/send", 
-                                   json={"jid": jid, "message": message}, 
+                                   json={"instanceId": instance_id, "contact": jid, "message": message}, 
                                    timeout=10)
             )
             response.raise_for_status()
@@ -39,23 +38,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
     hass.services.async_register(DOMAIN, "send_message", handle_send_message)
 
-    # Register Sidebar Panel pointing to the Node Engine UI
-    # Note: Use the external HA IP for the browser to reach it
-    from homeassistant.helpers.network import get_url
-    try:
-        base_url = get_url(hass, allow_internal=True, allow_ip=True)
-        panel_url = base_url.rsplit(":", 1)[0] + ":5002"
-    except:
-        panel_url = "http://192.168.188.95:5002"
-
-    hass.components.frontend.async_register_panel(
-        "iframe",
-        "whatsapp",
-        "mdi:whatsapp",
-        title="WhatsApp",
-        url=panel_url,
-        require_admin=True,
-    )
+    # NO manual panel registration needed!
+    # Ingress handles the sidebar automatically via config.yaml
 
     return True
 
@@ -63,5 +47,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry):
     """Unload entry."""
     if not hass.data[DOMAIN]:
         hass.services.async_remove(DOMAIN, "send_message")
-        hass.components.frontend.async_remove_panel("whatsapp")
     return True
