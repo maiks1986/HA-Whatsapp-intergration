@@ -50,6 +50,7 @@ async function bootstrap() {
     await engineManager.init(debugEnabled);
 
     app.use((req, res, next) => {
+        console.log(`TRACE [Server]: Incoming ${req.method} ${req.path}`);
         const userId = req.headers['x-hass-user-id'] as string;
         const isAdmin = req.headers['x-hass-is-admin'] === '1' || req.headers['x-hass-is-admin'] === 'true';
         

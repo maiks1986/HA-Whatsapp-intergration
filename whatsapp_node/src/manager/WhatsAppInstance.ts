@@ -38,152 +38,170 @@ export class WhatsAppInstance {
 
     async init() {
         if (this.sock) {
-            console.log(`Instance ${this.id}: Socket already exists, skipping init`);
+            console.log(`TRACE [Instance ${this.id}]: init() called but socket already exists. Skipping.`);
             return;
         }
 
-        const { state, saveCreds } = await useMultiFileAuthState(this.authPath);
-        const { version } = await fetchLatestBaileysVersion();
+        console.log(`TRACE [Instance ${this.id}]: Starting init(). Auth Path: ${this.authPath}`);
+        
+        try {
+            const { state, saveCreds } = await useMultiFileAuthState(this.authPath);
+            console.log(`TRACE [Instance ${this.id}]: Auth state loaded. Has credentials: ${!!state.creds}`);
+            
+            const { version, isLatest } = await fetchLatestBaileysVersion();
+            console.log(`TRACE [Instance ${this.id}]: Using Baileys v${version} (Latest: ${isLatest})`);
 
-        const logger = pino({ level: this.debugEnabled ? 'debug' : 'info' }); 
+            const logger = pino({ level: this.debugEnabled ? 'debug' : 'info' }); 
 
-        this.sock = makeWASocket({
-            version,
-            auth: state,
-            printQRInTerminal: false,
-            browser: Browsers.ubuntu('Chrome'),
-            syncFullHistory: false, // Defaulting to false for better stability, only recent chats needed
-            markOnlineOnConnect: true,
-            connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 120000,
-            logger: logger as any
-        });
+            this.sock = makeWASocket({
+                version,
+                auth: state,
+                printQRInTerminal: false,
+                browser: Browsers.ubuntu('Chrome'),
+                syncFullHistory: false,
+                markOnlineOnConnect: true,
+                connectTimeoutMs: 60000,
+                defaultQueryTimeoutMs: 120000,
+                logger: logger as any
+            });
 
-        if (this.debugEnabled) {
-            console.log(`Instance ${this.id}: Debug mode enabled. Listening for all events.`);
+            console.log(`TRACE [Instance ${this.id}]: Socket created. Attaching listeners...`);
+
             this.sock.ev.process((events) => {
                 const eventNames = Object.keys(events);
-                if (eventNames.length > 0) {
-                    console.log(`DEBUG: [Events] ${eventNames.join(', ')}`);
+                if (this.debugEnabled && eventNames.length > 0) {
+                    console.log(`DEBUG [Instance ${this.id}]: Raw Events -> ${eventNames.join(', ')}`);
                 }
-            });
-        }
 
-        this.sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
-            const { connection, lastDisconnect, qr } = update;
-            
-            if (qr) {
-                this.qr = await qrcode.toDataURL(qr);
-                this.status = 'qr_ready';
-            }
+                if (events['connection.update']) {
+                    const update = events['connection.update'];
+                    const { connection, lastDisconnect, qr } = update;
+                    
+                    if (qr) {
+                        console.log(`TRACE [Instance ${this.id}]: Connection Update -> QR Generated`);
+                        this.qr = qrcode.toDataURL(qr) as any; // Note: toDataURL is async, this might need handling
+                        this.status = 'qr_ready';
+                    }
 
-            if (connection === 'open') {
-                console.log(`Instance ${this.id}: Connected. Resetting sync watchdog...`);
-                this.status = 'connected';
-                this.qr = null;
-                db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
-                
-                // Start Watchdog to ensure data arrives
-                this.startSyncWatchdog();
-            }
+                    if (connection === 'open') {
+                        console.log(`TRACE [Instance ${this.id}]: Connection Update -> OPEN`);
+                        this.status = 'connected';
+                        this.qr = null;
+                        db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
+                        this.startSyncWatchdog();
+                    }
 
-            if (connection === 'close') {
-                const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-                console.log(`Instance ${this.id}: Connection closed. Status: ${statusCode}`);
-                this.status = 'disconnected';
-                this.qr = null;
-                this.stopSyncWatchdog();
-                this.sock = null; // CRITICAL: Clear the socket reference on close
-                
-                db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
-                
-                if (statusCode !== DisconnectReason.loggedOut) {
-                    if (this.isReconnecting) return;
-                    this.isReconnecting = true;
-                    console.log(`Instance ${this.id}: Unexpected close, reconnecting in 5s...`);
-                    setTimeout(async () => {
-                        this.isReconnecting = false;
-                        await this.init();
-                    }, 5000);
+                    if (connection === 'close') {
+                        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+                        console.log(`TRACE [Instance ${this.id}]: Connection Update -> CLOSED (Status: ${statusCode})`);
+                        this.status = 'disconnected';
+                        this.qr = null;
+                        this.stopSyncWatchdog();
+                        this.sock = null;
+                        
+                        db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
+                        
+                        if (statusCode !== DisconnectReason.loggedOut) {
+                            if (this.isReconnecting) return;
+                            this.isReconnecting = true;
+                            console.log(`TRACE [Instance ${this.id}]: Reconnecting in 5s...`);
+                            setTimeout(async () => {
+                                this.isReconnecting = false;
+                                await this.init();
+                            }, 5000);
+                        }
+                    }
                 }
-            }
-        });
 
-        this.sock.ev.on('creds.update', saveCreds);
+                if (events['creds.update']) {
+                    console.log(`TRACE [Instance ${this.id}]: Credentials updated`);
+                    saveCreds();
+                }
 
-        const upsertChat = db.prepare(`
-            INSERT INTO chats (instance_id, jid, name, unread_count) 
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(instance_id, jid) DO UPDATE SET
-            name = CASE WHEN excluded.name IS NOT NULL AND excluded.name != '' THEN excluded.name ELSE chats.name END,
-            unread_count = excluded.unread_count
-        `);
+                if (events['messaging-history.set']) {
+                    const { chats, contacts, messages } = events['messaging-history.set'];
+                    console.log(`TRACE [Instance ${this.id}]: messaging-history.set -> Chats: ${chats?.length || 0}, Contacts: ${contacts?.length || 0}, Messages: ${messages?.length || 0}`);
+                    if (chats && chats.length > 0) {
+                        this.syncRetryCount = 0;
+                        db.transaction(() => {
+                            for (const chat of chats) {
+                                upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0);
+                            }
+                        })();
+                        console.log(`TRACE [Instance ${this.id}]: Initialized ${chats.length} chats from history`);
+                    }
+                }
 
-        this.sock.ev.on('messaging-history.set', (payload: any) => {
-            const { chats, contacts } = payload;
-            console.log(`Instance ${this.id}: [HistorySet] Payload received. Chats: ${chats?.length || 0}, Contacts: ${contacts?.length || 0}`);
-            
-            if (chats && chats.length > 0) {
-                this.syncRetryCount = 0;
-                db.transaction(() => {
+                if (events['chats.upsert']) {
+                    const chats = events['chats.upsert'];
+                    console.log(`TRACE [Instance ${this.id}]: chats.upsert -> ${chats.length} items`);
+                    this.syncRetryCount = 0;
                     for (const chat of chats) {
                         upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0);
                     }
-                })();
-            }
-        });
+                }
 
-        this.sock.ev.on('chats.upsert', (chats: any[]) => {
-            if (this.debugEnabled) console.log(`Instance ${this.id}: [ChatsUpsert] ${chats.length} items`);
-            if (chats.length > 0) this.syncRetryCount = 0;
-            for (const chat of chats) {
-                upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0);
-            }
-        });
-
-        this.sock.ev.on('contacts.upsert', (contacts: any[]) => {
-            if (this.debugEnabled) console.log(`Instance ${this.id}: [ContactsUpsert] ${contacts.length} items`);
-            if (contacts.length > 0) this.syncRetryCount = 0;
-            for (const contact of contacts) {
-                upsertChat.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0], 0);
-            }
-        });
-
-        (this.sock.ev as any).on('contacts.set', (payload: any) => {
-            const contacts = payload.contacts || [];
-            if (this.debugEnabled) console.log(`Instance ${this.id}: [ContactsSet] ${contacts.length} items`);
-            if (contacts.length > 0) this.syncRetryCount = 0;
-            for (const contact of contacts) {
-                upsertChat.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0], 0);
-            }
-        });
-
-        this.sock.ev.on('messages.upsert', async m => {
-            if (m.type === 'notify') {
-                for (const msg of m.messages) {
-                    const text = msg.message?.conversation || 
-                                 msg.message?.extendedTextMessage?.text || 
-                                 msg.message?.imageMessage?.caption || "";
-                    
-                    if (text) {
-                        const jid = msg.key.remoteJid!;
-                        db.prepare(`
-                            INSERT OR IGNORE INTO messages 
-                            (instance_id, chat_jid, sender_jid, sender_name, text, is_from_me) 
-                            VALUES (?, ?, ?, ?, ?, ?)
-                        `).run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0);
-
-                        db.prepare(`
-                            INSERT INTO chats (instance_id, jid, last_message_text, last_message_timestamp)
-                            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                            ON CONFLICT(instance_id, jid) DO UPDATE SET
-                            last_message_text = excluded.last_message_text,
-                            last_message_timestamp = CURRENT_TIMESTAMP
-                        `).run(this.id, jid, text);
+                if (events['contacts.upsert']) {
+                    const contacts = events['contacts.upsert'];
+                    console.log(`TRACE [Instance ${this.id}]: contacts.upsert -> ${contacts.length} items`);
+                    this.syncRetryCount = 0;
+                    for (const contact of contacts) {
+                        upsertChat.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0], 0);
                     }
                 }
-            }
-        });
+
+                if (events['messages.upsert']) {
+                    const m = events['messages.upsert'];
+                    if (m.type === 'notify') {
+                        console.log(`TRACE [Instance ${this.id}]: messages.upsert -> ${m.messages.length} messages`);
+                        for (const msg of m.messages) {
+                            const text = msg.message?.conversation || 
+                                         msg.message?.extendedTextMessage?.text || 
+                                         msg.message?.imageMessage?.caption || "";
+                            
+                            if (text) {
+                                const jid = msg.key.remoteJid!;
+                                db.prepare(`
+                                    INSERT OR IGNORE INTO messages 
+                                    (instance_id, chat_jid, sender_jid, sender_name, text, is_from_me) 
+                                    VALUES (?, ?, ?, ?, ?, ?)
+                                `).run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0);
+
+                                db.prepare(`
+                                    INSERT INTO chats (instance_id, jid, last_message_text, last_message_timestamp)
+                                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                                    ON CONFLICT(instance_id, jid) DO UPDATE SET
+                                    last_message_text = excluded.last_message_text,
+                                    last_message_timestamp = CURRENT_TIMESTAMP
+                                `).run(this.id, jid, text);
+                            }
+                        }
+                    }
+                }
+            });
+
+            const upsertChat = db.prepare(`
+                INSERT INTO chats (instance_id, jid, name, unread_count) 
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(instance_id, jid) DO UPDATE SET
+                name = CASE WHEN excluded.name IS NOT NULL AND excluded.name != '' THEN excluded.name ELSE chats.name END,
+                unread_count = excluded.unread_count
+            `);
+
+            // Legacy direct listeners (some versions of baileys prefer these)
+            (this.sock.ev as any).on('contacts.set', (payload: any) => {
+                const contacts = payload.contacts || [];
+                console.log(`TRACE [Instance ${this.id}]: contacts.set -> ${contacts.length} items`);
+                if (contacts.length > 0) this.syncRetryCount = 0;
+                for (const contact of contacts) {
+                    upsertChat.run(this.id, contact.id, contact.name || contact.notify || contact.id.split('@')[0], 0);
+                }
+            });
+
+        } catch (err) {
+            console.error(`TRACE [Instance ${this.id}]: FATAL ERROR during init:`, err);
+        }
+    }
     }
 
     private startSyncWatchdog() {
