@@ -1,0 +1,61 @@
+import Database from 'better-sqlite3';
+import path from 'path';
+
+// Use /data for Home Assistant Add-on persistence
+const DB_PATH = process.env.NODE_ENV === 'development' 
+    ? path.join(__dirname, '../../whatsapp.db')
+    : '/data/whatsapp.db';
+
+const db = new Database(DB_PATH);
+
+export function initDatabase() {
+    // Users Table
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            role TEXT DEFAULT 'user'
+        )
+    `);
+
+    // Instances Table
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS instances (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            owner_id INTEGER,
+            status TEXT DEFAULT 'disconnected',
+            last_seen DATETIME,
+            FOREIGN KEY(owner_id) REFERENCES users(id)
+        )
+    `);
+
+    // Messages Table
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            instance_id INTEGER,
+            chat_jid TEXT,
+            sender_jid TEXT,
+            sender_name TEXT,
+            text TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            is_from_me INTEGER,
+            UNIQUE(instance_id, chat_jid, text, timestamp),
+            FOREIGN KEY(instance_id) REFERENCES instances(id)
+        )
+    `);
+
+    // Settings Table (Gemini keys, etc)
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    `);
+
+    console.log('Database initialized successfully at', DB_PATH);
+}
+
+export default db;
