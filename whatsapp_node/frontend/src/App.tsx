@@ -61,7 +61,7 @@ const App = () => {
           <h2>Link your WhatsApp</h2>
           <p>Scan this code with your phone</p>
           <img src={qr} alt="QR Code" style={{ border: '1px solid #eee', padding: '10px', borderRadius: '8px' }} />
-        </section> section>
+        </section>
       )}
 
       {status === 'connected' && (

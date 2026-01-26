@@ -1,5 +1,5 @@
 name: "WhatsApp Node Engine"
-version: "1.0.5"
+version: "1.0.6"
 slug: "whatsapp_node_engine"
 description: "Browserless WhatsApp Engine using TypeScript and Baileys"
 arch:
