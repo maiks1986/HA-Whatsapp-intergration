@@ -1,0 +1,26 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up WhatsApp",
+        "data": {
+          "name": "Account Name",
+          "monitor_only": "Monitor Mode (Silent)"
+        }
+      },
+      "scan_qr": {
+        "title": "Scan QR Code",
+        "description": "Please scan the QR code below with your WhatsApp mobile app:\n\n{qr_code_image}"
+      }
+    },
+    "error": {
+      "init_error": "Failed to initialize WhatsApp client.",
+      "login_check_error": "Failed to check login status.",
+      "not_logged_in": "Not logged in. Please scan the QR code."
+    },
+    "abort": {
+      "already_configured": "Account is already configured.",
+      "init_error": "Failed to initialize."
+    }
+  }
+}
