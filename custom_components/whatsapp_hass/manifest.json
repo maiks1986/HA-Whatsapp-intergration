@@ -6,6 +6,7 @@
   "codeowners": ["@MaiksT"],
   "version": "0.1.0",
   "iot_class": "cloud_polling",
+  "config_flow": true,
   "dependencies": [],
   "requirements": ["selenium==4.22.0", "webdriver-manager==4.0.1", "requests==2.32.3"]
 }
