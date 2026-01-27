@@ -9,7 +9,7 @@ import makeWASocket, {
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode';
-import db from '../db/database';
+import { getDb } from '../db/database';
 import path from 'path';
 import fs from 'fs';
 import pino from 'pino';
@@ -49,14 +49,16 @@ export class WhatsAppInstance {
             const { version, isLatest } = await fetchLatestBaileysVersion();
             const logger = pino({ level: this.debugEnabled ? 'debug' : 'info' }); 
 
-            const upsertContact = db.prepare(`
+            const dbInstance = getDb();
+
+            const upsertContact = dbInstance.prepare(`
                 INSERT INTO contacts (instance_id, jid, name) 
                 VALUES (?, ?, ?)
                 ON CONFLICT(instance_id, jid) DO UPDATE SET
                 name = CASE WHEN excluded.name IS NOT NULL AND excluded.name != '' THEN excluded.name ELSE contacts.name END
             `);
 
-            const upsertChat = db.prepare(`
+            const upsertChat = dbInstance.prepare(`
                 INSERT INTO chats (instance_id, jid, name, unread_count, last_message_timestamp) 
                 VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(instance_id, jid) DO UPDATE SET
@@ -65,7 +67,7 @@ export class WhatsAppInstance {
                 last_message_timestamp = CASE WHEN excluded.last_message_timestamp IS NOT NULL THEN excluded.last_message_timestamp ELSE chats.last_message_timestamp END
             `);
 
-            const insertMessage = db.prepare(`
+            const insertMessage = dbInstance.prepare(`
                 INSERT OR IGNORE INTO messages 
                 (instance_id, chat_jid, sender_jid, sender_name, text, is_from_me, timestamp) 
                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -114,7 +116,7 @@ export class WhatsAppInstance {
                             console.log(`TRACE [Instance ${this.id}]: Connection OPEN`);
                             this.status = 'connected';
                             this.qr = null;
-                            db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
+                            dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
                             this.startSyncWatchdog();
                         }
                         if (connection === 'close') {
@@ -122,7 +124,7 @@ export class WhatsAppInstance {
                             this.status = 'disconnected';
                             this.sock = null;
                             this.stopSyncWatchdog();
-                            db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
+                            dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
                             if (statusCode === DisconnectReason.loggedOut) {
                                 console.log(`TRACE [Instance ${this.id}]: Session logged out. Clearing auth and forcing new QR...`);
                                 await this.deleteAuth();
@@ -235,7 +237,8 @@ export class WhatsAppInstance {
         this.stopSyncWatchdog();
         // Increased to 5 minutes to allow for large history syncs
         this.watchdogTimer = setTimeout(async () => {
-            const row = db.prepare('SELECT COUNT(*) as count FROM chats WHERE instance_id = ?').get(this.id) as any;
+            const dbInstance = getDb();
+            const row = dbInstance.prepare('SELECT COUNT(*) as count FROM chats WHERE instance_id = ?').get(this.id) as any;
             const chatCount = row?.count || 0;
 
             if (chatCount === 0) {
@@ -276,13 +279,14 @@ export class WhatsAppInstance {
         if (!this.sock || this.status !== 'connected') throw new Error("Instance not connected");
         await this.sock.sendMessage(jid, { text });
         
-        db.prepare(`
+        const dbInstance = getDb();
+        dbInstance.prepare(`
             INSERT OR IGNORE INTO messages 
             (instance_id, chat_jid, sender_jid, sender_name, text, is_from_me) 
             VALUES (?, ?, ?, ?, ?, ?)
         `).run(this.id, jid, 'me', 'Me', text, 1);
 
-        db.prepare(`
+        dbInstance.prepare(`
             UPDATE chats SET last_message_text = ?, last_message_timestamp = CURRENT_TIMESTAMP
             WHERE instance_id = ? AND jid = ?
         `).run(text, this.id, jid);

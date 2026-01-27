@@ -5,7 +5,7 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
-import db, { initDatabase, closeDatabase } from './db/database';
+import { initDatabase, getDb } from './db/database';
 import { engineManager } from './manager/EngineManager';
 import { aiService } from './services/AiService';
 
@@ -65,21 +65,24 @@ async function bootstrap() {
     const config = getAddonConfig();
     const resetDb = config.reset_database === true || config.reset_database === 'true';
 
+    // Ensure database exists and schema is ready
+    initDatabase();
+    const db = getDb();
+
     if (resetDb) {
         console.log('DEBUG: Reset Database flag detected. Wiping activity data...');
-        initDatabase(); // Ensure DB is initialized so tables exist
         try {
-            db.prepare('DELETE FROM messages').run();
-            db.prepare('DELETE FROM chats').run();
-            db.prepare('DELETE FROM contacts').run();
+            db.transaction(() => {
+                db.prepare('DELETE FROM messages').run();
+                db.prepare('DELETE FROM chats').run();
+                db.prepare('DELETE FROM contacts').run();
+            })();
             console.log('DEBUG: Activity data wiped. (Instances and Settings preserved)');
-            // Small delay to let SQLite finalize
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // Larger safety delay for I/O to settle
+            await new Promise(resolve => setTimeout(resolve, 2000));
         } catch (e) {
             console.error('DEBUG: Failed to wipe activity data:', e);
         }
-    } else {
-        initDatabase();
     }
     
     const debugEnabled = config.debug_logging === true || config.debug_logging === 'true';
