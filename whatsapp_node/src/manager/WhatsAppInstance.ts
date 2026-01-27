@@ -265,6 +265,7 @@ export class WhatsAppInstance {
             });
 
             console.log(`TRACE [Instance ${this.id}]: init() successfully completed.`);
+        }
         } catch (err) {
             console.error(`TRACE [Instance ${this.id}]: FATAL ERROR during init:`, err);
         }
