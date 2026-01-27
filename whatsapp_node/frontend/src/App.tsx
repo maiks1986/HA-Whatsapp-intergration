@@ -18,8 +18,7 @@ import {
   MessageSquare,
   AlertTriangle,
   RotateCcw,
-  Terminal,
-  History
+  Terminal
 } from 'lucide-react';
 
 import Debug from './Debug';
