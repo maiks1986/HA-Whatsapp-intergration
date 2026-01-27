@@ -122,12 +122,19 @@ async function bootstrap() {
         if (!user.isAdmin && instanceData?.ha_user_id !== user.id) return res.status(403).json({ error: "Access Denied" });
 
         const chats = db.prepare(`
-            SELECT * FROM chats 
-            WHERE instance_id = ? 
-              AND (last_message_text IS NOT NULL OR unread_count > 0 OR name != jid)
-            ORDER BY last_message_timestamp DESC
+            SELECT 
+                c.jid, 
+                COALESCE(co.name, c.name, c.jid) as name, 
+                c.unread_count, 
+                c.last_message_text, 
+                c.last_message_timestamp
+            FROM chats c
+            LEFT JOIN contacts co ON c.jid = co.jid AND c.instance_id = co.instance_id
+            WHERE c.instance_id = ? 
+              AND (c.last_message_text IS NOT NULL OR c.unread_count > 0)
+            ORDER BY c.last_message_timestamp DESC
         `).all(instanceId);
-        console.log(`API: Returning ${chats.length} chats`);
+        console.log(`API: Returning ${chats.length} active chats`);
         res.json(chats);
     });
 

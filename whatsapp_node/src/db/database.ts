@@ -32,7 +32,18 @@ export function initDatabase() {
         )
     `);
 
-    // Chats Table
+    // Contacts Table (Identity storage)
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS contacts (
+            instance_id INTEGER,
+            jid TEXT,
+            name TEXT,
+            PRIMARY KEY(instance_id, jid),
+            FOREIGN KEY(instance_id) REFERENCES instances(id)
+        )
+    `);
+
+    // Chats Table (Activity storage)
     db.exec(`
         CREATE TABLE IF NOT EXISTS chats (
             instance_id INTEGER,
