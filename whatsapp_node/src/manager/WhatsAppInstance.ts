@@ -71,9 +71,56 @@ export class WhatsAppInstance {
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             `);
 
+            this.sock = makeWASocket({
+                version,
+                auth: state,
+                printQRInTerminal: false,
+                browser: Browsers.ubuntu('Chrome'),
+                syncFullHistory: true,
+                markOnlineOnConnect: true,
+                connectTimeoutMs: 60000,
+                defaultQueryTimeoutMs: 120000,
+                logger: logger as any
+            });
+
             if (this.sock) {
                 (this.sock as any).ev.process(async (events: any) => {
-                    // ... (connection handling remains same)
+                    const eventNames = Object.keys(events);
+                    if (this.debugEnabled && eventNames.length > 0) {
+                        console.log(`DEBUG [Instance ${this.id}]: Raw Events -> ${eventNames.join(', ')}`);
+                    }
+
+                    if (events['connection.update']) {
+                        const update = events['connection.update'];
+                        const { connection, lastDisconnect, qr } = update;
+                        if (qr) {
+                            this.qr = await qrcode.toDataURL(qr);
+                            this.status = 'qr_ready';
+                        }
+                        if (connection === 'open') {
+                            console.log(`TRACE [Instance ${this.id}]: Connection OPEN`);
+                            this.status = 'connected';
+                            this.qr = null;
+                            db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
+                            this.startSyncWatchdog();
+                        }
+                        if (connection === 'close') {
+                            const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+                            this.status = 'disconnected';
+                            this.sock = null;
+                            this.stopSyncWatchdog();
+                            db.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
+                            if (statusCode === DisconnectReason.loggedOut) {
+                                console.log(`TRACE [Instance ${this.id}]: Session logged out. Clearing auth and forcing new QR...`);
+                                await this.deleteAuth();
+                                await this.init();
+                            } else {
+                                if (this.isReconnecting) return;
+                                this.isReconnecting = true;
+                                setTimeout(async () => { this.isReconnecting = false; await this.init(); }, 5000);
+                            }
+                        }
+                    }
 
                     if (events['creds.update']) saveCreds();
 
