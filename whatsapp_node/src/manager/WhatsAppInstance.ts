@@ -183,7 +183,6 @@ export class WhatsAppInstance {
                     }
                 });
             }
-        }
         } catch (err) {
             console.error(`TRACE [Instance ${this.id}]: FATAL ERROR during init:`, err);
         }
