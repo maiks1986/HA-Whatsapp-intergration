@@ -117,7 +117,15 @@ export class WhatsAppInstance {
                             this.status = 'connected';
                             this.qr = null;
                             dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
-                            this.startSyncWatchdog();
+                            
+                            // Check if we need to force a re-sync
+                            const row = dbInstance.prepare('SELECT COUNT(*) as count FROM chats WHERE instance_id = ?').get(this.id) as any;
+                            const isEmpty = row?.count === 0;
+                            if (isEmpty) {
+                                console.log(`TRACE [Instance ${this.id}]: Database is empty. Triggering fast sync check...`);
+                            }
+
+                            this.startSyncWatchdog(isEmpty);
                         }
                         if (connection === 'close') {
                             const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
@@ -236,9 +244,10 @@ export class WhatsAppInstance {
         }
     }
 
-    private startSyncWatchdog() {
+    private startSyncWatchdog(immediate: boolean = false) {
         this.stopSyncWatchdog();
-        // Increased to 5 minutes to allow for large history syncs
+        // Increased to 5 minutes to allow for large history syncs, but check faster if immediate is requested
+        const timeout = immediate ? 10000 : 300000;
         this.watchdogTimer = setTimeout(async () => {
             const dbInstance = getDb();
             const row = dbInstance.prepare('SELECT COUNT(*) as count FROM chats WHERE instance_id = ?').get(this.id) as any;
@@ -246,7 +255,7 @@ export class WhatsAppInstance {
 
             if (chatCount === 0) {
                 this.syncRetryCount++;
-                console.log(`Instance ${this.id}: Watchdog alert! No chats found in DB after 300s. Attempt ${this.syncRetryCount}/${this.maxSyncRetries}`);
+                console.log(`Instance ${this.id}: Watchdog alert! No chats found in DB after ${timeout/1000}s. Attempt ${this.syncRetryCount}/${this.maxSyncRetries}`);
                 
                 if (this.syncRetryCount < this.maxSyncRetries) {
                     if (this.isReconnecting) return;
@@ -268,7 +277,7 @@ export class WhatsAppInstance {
             } else {
                 console.log(`Instance ${this.id}: Watchdog satisfied. Found ${chatCount} chats in database.`);
             }
-        }, 300000); 
+        }, timeout); 
     }
 
     private stopSyncWatchdog() {
