@@ -185,8 +185,46 @@ export class WhatsAppInstance {
                         })();
                     }
 
-Unknown"Unknown", text, msg.key.fromMe ? 1 : 0, ts);
-                                    db.prepare(`UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ?`).run(text, ts, this.id, jid);
+                    if ((events as any)['chats.set']) {
+                        const chats = (events as any)['chats.set'].chats;
+                        if (chats) dbInstance.transaction(() => {
+                            for (const chat of chats) {
+                                if (!isJidValid(chat.id)) continue;
+                                const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
+                                if (ts) {
+                                    const isoTs = new Date(Number(ts) * 1000).toISOString();
+                                    upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, isoTs);
+                                }
+                            }
+                        })();
+                    }
+
+                    if (events['chats.upsert']) {
+                        const chats = events['chats.upsert'];
+                        dbInstance.transaction(() => {
+                            for (const chat of chats) {
+                                if (!isJidValid(chat.id)) continue;
+                                const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
+                                const isoTs = ts ? new Date(Number(ts) * 1000).toISOString() : null;
+                                upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, isoTs);
+                            }
+                        })();
+                    }
+
+                    if (events['messages.upsert']) {
+                        const m = events['messages.upsert'];
+                        if (m.type === 'notify') {
+                            for (const msg of m.messages) {
+                                const text = getMessageText(msg);
+                                if (text && isJidValid(msg.key.remoteJid!)) {
+                                    const jid = msg.key.remoteJid!;
+                                    const ts = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
+                                    
+                                    // Ensure chat exists
+                                    upsertChat.run(this.id, jid, msg.pushName || jid.split('@')[0], 0, ts);
+                                    insertMessage.run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
+
+                                    dbInstance.prepare(`UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ?`).run(text, ts, this.id, jid);
                                 }
                             }
                         }
