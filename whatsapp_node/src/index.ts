@@ -54,29 +54,19 @@ async function bootstrap() {
     const resetDb = config.reset_database === true || config.reset_database === 'true';
 
     if (resetDb) {
-        console.log('DEBUG: Reset Database flag detected. Wiping data...');
-        closeDatabase(); // Ensure connection is closed
-        const DB_PATH = '/data/whatsapp.db';
-        if (fs.existsSync(DB_PATH)) {
-            try {
-                fs.unlinkSync(DB_PATH);
-                console.log('DEBUG: database file deleted.');
-            } catch (e) {
-                console.error('DEBUG: Failed to delete database file:', e);
-            }
+        console.log('DEBUG: Reset Database flag detected. Wiping activity data...');
+        initDatabase(); // Ensure DB is initialized so tables exist
+        try {
+            db.prepare('DELETE FROM messages').run();
+            db.prepare('DELETE FROM chats').run();
+            db.prepare('DELETE FROM contacts').run();
+            console.log('DEBUG: Activity data wiped. (Instances and Settings preserved)');
+        } catch (e) {
+            console.error('DEBUG: Failed to wipe activity data:', e);
         }
-        
-        // Wipe all possible auth folders
-        const files = fs.readdirSync('/data');
-        for (const file of files) {
-            if (file.startsWith('auth_info_')) {
-                fs.rmSync(path.join('/data', file), { recursive: true, force: true });
-            }
-        }
-        console.log('DEBUG: Wipe complete.');
+    } else {
+        initDatabase();
     }
-
-    initDatabase();
     
     const debugEnabled = config.debug_logging === true || config.debug_logging === 'true';
     if (debugEnabled) console.log('DEBUG: Verbose logging enabled');
