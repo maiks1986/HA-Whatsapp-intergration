@@ -73,6 +73,8 @@ async function bootstrap() {
             db.prepare('DELETE FROM chats').run();
             db.prepare('DELETE FROM contacts').run();
             console.log('DEBUG: Activity data wiped. (Instances and Settings preserved)');
+            // Small delay to let SQLite finalize
+            await new Promise(resolve => setTimeout(resolve, 500));
         } catch (e) {
             console.error('DEBUG: Failed to wipe activity data:', e);
         }
