@@ -155,8 +155,18 @@ const App = () => {
   };
 
   const handleSaveSettings = async () => {
-    await axios.post('/api/settings', { key: 'gemini_api_key', value: geminiKey });
+    await axios.post('api/settings', { key: 'gemini_api_key', value: geminiKey });
     setIsSettingsOpen(false);
+  };
+
+  const handleSystemReset = async () => {
+    if (!confirm("CRITICAL: This will delete ALL instances, ALL message history, and ALL settings. This cannot be undone. Are you absolutely sure?")) return;
+    try {
+      await axios.post('api/system/reset');
+      window.location.reload();
+    } catch (e) {
+      alert("Failed to perform system reset");
+    }
   };
 
   const fetchMessages = async (instanceId: number, jid: string) => {
@@ -415,6 +425,12 @@ const App = () => {
                 <div className="bg-teal-50 p-3 rounded-xl mt-4 border border-teal-100/50"><p className="text-[10px] text-teal-700 font-bold leading-relaxed">AI drafting and analysis require a Google API key. You can create one for free at Google AI Studio.</p></div>
               </div>
               <button onClick={handleSaveSettings} className="w-full bg-teal-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-teal-700 shadow-xl shadow-teal-600/30 transition-all active:scale-[0.98] mt-4">Sync Configuration</button>
+              
+              <div className="pt-6 border-t border-slate-100 mt-6">
+                <button onClick={handleSystemReset} className="w-full bg-white text-red-500 border-2 border-red-100 p-4 rounded-2xl font-bold uppercase text-xs tracking-widest hover:bg-red-50 transition-all flex items-center justify-center gap-2">
+                  <AlertTriangle size={16} /> Full System Wipe
+                </button>
+              </div>
             </div>
           </div>
         </div>

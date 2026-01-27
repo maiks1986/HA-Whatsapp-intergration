@@ -41,9 +41,27 @@ function getAddonConfig() {
 
 async function bootstrap() {
     console.log('--- STARTING BOOTSTRAP ---');
-    initDatabase();
     
     const config = getAddonConfig();
+    const resetDb = config.reset_database === true || config.reset_database === 'true';
+
+    if (resetDb) {
+        console.log('DEBUG: Reset Database flag detected. Wiping data...');
+        const DB_PATH = '/data/whatsapp.db';
+        if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
+        
+        // Wipe all possible auth folders
+        const files = fs.readdirSync('/data');
+        for (const file of files) {
+            if (file.startsWith('auth_info_')) {
+                fs.rmSync(path.join('/data', file), { recursive: true, force: true });
+            }
+        }
+        console.log('DEBUG: Wipe complete.');
+    }
+
+    initDatabase();
+    
     const debugEnabled = config.debug_logging === true || config.debug_logging === 'true';
     if (debugEnabled) console.log('DEBUG: Verbose logging enabled');
     
@@ -216,6 +234,26 @@ async function bootstrap() {
     app.get('/api/settings/:key', requireAuth, (req, res) => {
         const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(req.params.key) as any;
         res.json({ value: row?.value || "" });
+    });
+
+    app.post('/api/system/reset', requireAuth, async (req, res) => {
+        const user = (req as any).haUser;
+        if (!user.isAdmin) return res.status(403).json({ error: "Admin only" });
+
+        console.log('API: FULL SYSTEM RESET REQUESTED');
+        const instances = engineManager.getAllInstances();
+        for (const inst of instances) {
+            await inst.deleteAuth();
+            await engineManager.stopInstance(inst.id);
+        }
+
+        db.prepare('DELETE FROM messages').run();
+        db.prepare('DELETE FROM chats').run();
+        db.prepare('DELETE FROM contacts').run();
+        db.prepare('DELETE FROM instances').run();
+        db.prepare('DELETE FROM settings').run();
+
+        res.json({ success: true });
     });
 
     app.post('/api/ai/analyze', requireAuth, async (req, res) => {
