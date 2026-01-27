@@ -85,5 +85,3 @@ export function closeDatabase() {
         console.log('Database connection closed.');
     }
 }
-
-export default getDb(); // Maintain partial compatibility for now

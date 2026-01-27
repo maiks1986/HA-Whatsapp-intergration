@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import db from "../db/database";
+import { getDb } from "../db/database";
 
 class AiService {
     private genAI: GoogleGenerativeAI | null = null;
@@ -7,6 +7,7 @@ class AiService {
     private async getClient() {
         if (this.genAI) return this.genAI;
         
+        const db = getDb();
         const apiKey = db.prepare('SELECT value FROM settings WHERE key = ?').get('gemini_api_key') as any;
         if (!apiKey?.value) {
             console.warn("AI Service: No Gemini API Key found in settings.");

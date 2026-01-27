@@ -1,4 +1,4 @@
-import db from '../db/database';
+import { getDb } from '../db/database';
 import { WhatsAppInstance } from './WhatsAppInstance';
 
 class EngineManager {
@@ -7,6 +7,7 @@ class EngineManager {
 
     async init(debugEnabled: boolean = false) {
         this.debugEnabled = debugEnabled;
+        const db = getDb();
         // Load all instances from DB
         const rows = db.prepare('SELECT id, name FROM instances').all() as any[];
         for (const row of rows) {

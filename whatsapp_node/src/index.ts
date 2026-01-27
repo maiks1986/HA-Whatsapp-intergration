@@ -62,11 +62,28 @@ function getAddonConfig() {
 async function bootstrap() {
     console.log('--- STARTING BOOTSTRAP ---');
     
+    // 1. Give the OS/Supervisor time to release any previous locks
+    console.log('DEBUG: Waiting 5s for system to settle...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
     const config = getAddonConfig();
     const resetDb = config.reset_database === true || config.reset_database === 'true';
 
-    // Ensure database exists and schema is ready
-    initDatabase();
+    // 2. Resilient Database Initialization
+    let retryCount = 0;
+    const maxRetries = 5;
+    while (retryCount < maxRetries) {
+        try {
+            initDatabase();
+            break; 
+        } catch (err) {
+            retryCount++;
+            console.error(`DEBUG: Database init failed (attempt ${retryCount}/${maxRetries}):`, err);
+            if (retryCount >= maxRetries) throw err;
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+    }
+
     const db = getDb();
 
     if (resetDb) {
@@ -77,9 +94,10 @@ async function bootstrap() {
                 db.prepare('DELETE FROM chats').run();
                 db.prepare('DELETE FROM contacts').run();
             })();
-            console.log('DEBUG: Activity data wiped. (Instances and Settings preserved)');
-            // Larger safety delay for I/O to settle
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            console.log('DEBUG: Activity data wiped. Optimizing database...');
+            db.exec('VACUUM'); // Flushes changes and compacts file
+            console.log('DEBUG: Optimization complete.');
+            await new Promise(resolve => setTimeout(resolve, 3000));
         } catch (e) {
             console.error('DEBUG: Failed to wipe activity data:', e);
         }
