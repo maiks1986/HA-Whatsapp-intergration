@@ -223,25 +223,22 @@ export class WhatsAppInstance {
             });
 
             // Heartbeat: Log and stream EVERY event emitted by the socket
-            evAny.on('events', (events: any) => {
-                const names = Object.keys(events);
-                if (names.length > 0) {
-                    const logEntry = JSON.stringify({
-                        timestamp: new Date().toISOString(),
-                        instanceId: this.id,
-                        events
-                    });
-                    
-                    // 1. Broadcast to live debug clients
-                    this.io.emit('raw_whatsapp_event', JSON.parse(logEntry));
+            (this.sock.ev as any).on('events', (events: any) => {
+                const logEntry = JSON.stringify({
+                    timestamp: new Date().toISOString(),
+                    instanceId: this.id,
+                    events
+                });
+                
+                // 1. Live stream
+                this.io.emit('raw_whatsapp_event', JSON.parse(logEntry));
 
-                    // 2. Append to persistent log file
-                    try {
-                        const logPath = process.env.NODE_ENV === 'development' ? './raw_events.log' : '/data/raw_events.log';
-                        fs.appendFileSync(logPath, logEntry + '\n');
-                    } catch (e) {
-                        console.error('TRACE [Instance ' + this.id + ']: Failed to write to raw_events.log', e);
-                    }
+                // 2. Disk log
+                try {
+                    const logPath = process.env.NODE_ENV === 'development' ? './raw_events.log' : '/data/raw_events.log';
+                    fs.appendFileSync(logPath, logEntry + '\n');
+                } catch (e) {
+                    // Silently fail if disk is full/blocked, but log once
                 }
             });
 
