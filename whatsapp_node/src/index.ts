@@ -310,20 +310,27 @@ async function bootstrap() {
     });
 
     io.on('connection', (socket) => {
-        console.log('WebSocket: Client connected');
+        console.log(`TRACE [WebSocket]: Client connected (${socket.id})`);
         const interval = setInterval(() => {
             const allInstances = engineManager.getAllInstances();
             if (allInstances.length > 0) {
                 const status = allInstances.map(i => ({
                     id: i.id,
                     status: i.status,
-                    qr: i.qr
+                    qr: i.qr ? 'YES' : 'NO'
                 }));
-                socket.emit('instances_status', status);
+                console.log(`TRACE [WebSocket]: Broadcasting status for ${allInstances.length} instances:`, JSON.stringify(status));
+                socket.emit('instances_status', allInstances.map(i => ({
+                    id: i.id,
+                    status: i.status,
+                    qr: i.qr
+                })));
+            } else {
+                console.log('TRACE [WebSocket]: No instances found to broadcast.');
             }
         }, 2000);
         socket.on('disconnect', () => {
-            console.log('WebSocket: Client disconnected');
+            console.log(`TRACE [WebSocket]: Client disconnected (${socket.id})`);
             clearInterval(interval);
         });
     });

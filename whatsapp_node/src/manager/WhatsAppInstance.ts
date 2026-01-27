@@ -227,14 +227,15 @@ export class WhatsAppInstance {
                                 if (name) upsertContact.run(this.id, contact.id, name);
                             }
                         }
-                    })();
-                });
-            }
-        } catch (err) {
-            console.error(`TRACE [Instance ${this.id}]: FATAL ERROR during init:`, err);
-        }
-    }
-
+                                    })();
+                                });
+                    
+                                console.log(`TRACE [Instance ${this.id}]: init() successfully completed.`);
+                            }
+                            } catch (err) {
+                                console.error(`TRACE [Instance ${this.id}]: FATAL ERROR during init:`, err);
+                            }
+                        }
     private startSyncWatchdog(immediate: boolean = false) {
         this.stopSyncWatchdog();
         // Increased to 5 minutes to allow for large history syncs, but check faster if immediate is requested
