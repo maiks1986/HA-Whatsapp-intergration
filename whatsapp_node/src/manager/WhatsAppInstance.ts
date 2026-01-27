@@ -144,7 +144,7 @@ export class WhatsAppInstance {
                         const { chats, contacts, messages } = events['messaging-history.set'];
                         console.log(`TRACE [Instance ${this.id}]: History Set -> Chats: ${chats?.length || 0}, Contacts: ${contacts?.length || 0}, Messages: ${messages?.length || 0}`);
                         
-                                                db.transaction(() => {
+                                                dbInstance.transaction(() => {
                                                     // 1. Process Contacts (just for identity)
                                                     if (contacts) {
                                                         for (const contact of contacts) {
@@ -154,7 +154,7 @@ export class WhatsAppInstance {
                                                                     upsertContact.run(this.id, contact.id, name);
                                                                 } else {
                                                                     // Only insert number if it doesn't exist yet
-                                                                    db.prepare('INSERT OR IGNORE INTO contacts (instance_id, jid, name) VALUES (?, ?, ?)').run(this.id, contact.id, contact.id.split('@')[0]);
+                                                                    dbInstance.prepare('INSERT OR IGNORE INTO contacts (instance_id, jid, name) VALUES (?, ?, ?)').run(this.id, contact.id, contact.id.split('@')[0]);
                                                                 }
                                                             }
                                                         }
@@ -185,42 +185,7 @@ export class WhatsAppInstance {
                         })();
                     }
 
-                    if ((events as any)['chats.set']) {
-                        const chats = (events as any)['chats.set'].chats;
-                        if (chats) db.transaction(() => {
-                            for (const chat of chats) {
-                                if (!isJidValid(chat.id)) continue;
-                                const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
-                                if (ts) {
-                                    const isoTs = new Date(Number(ts) * 1000).toISOString();
-                                    upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, isoTs);
-                                }
-                            }
-                        })();
-                    }
-
-                    if (events['chats.upsert']) {
-                        const chats = events['chats.upsert'];
-                        db.transaction(() => {
-                            for (const chat of chats) {
-                                if (!isJidValid(chat.id)) continue;
-                                const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
-                                const isoTs = ts ? new Date(Number(ts) * 1000).toISOString() : null;
-                                upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, isoTs);
-                            }
-                        })();
-                    }
-
-                    if (events['messages.upsert']) {
-                        const m = events['messages.upsert'];
-                        if (m.type === 'notify') {
-                            for (const msg of m.messages) {
-                                const text = getMessageText(msg);
-                                if (text && isJidValid(msg.key.remoteJid!)) {
-                                    const jid = msg.key.remoteJid!;
-                                    const ts = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
-                                    upsertChat.run(this.id, jid, msg.pushName || jid.split('@')[0], 0, ts);
-                                    insertMessage.run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
+Unknown"Unknown", text, msg.key.fromMe ? 1 : 0, ts);
                                     db.prepare(`UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ?`).run(text, ts, this.id, jid);
                                 }
                             }
