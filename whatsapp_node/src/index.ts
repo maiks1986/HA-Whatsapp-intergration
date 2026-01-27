@@ -17,6 +17,18 @@ process.on('unhandledRejection', (reason, promise) => {
     console.error('CRITICAL: Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
+// Add timestamp to console logs
+const originalLog = console.log;
+const originalError = console.error;
+
+console.log = (...args) => {
+    originalLog(`[${new Date().toISOString()}]`, ...args);
+};
+
+console.error = (...args) => {
+    originalError(`[${new Date().toISOString()}]`, ...args);
+};
+
 const app = express();
 const server = http.createServer(app);
 const io = new SocketServer(server, { cors: { origin: "*" } });
