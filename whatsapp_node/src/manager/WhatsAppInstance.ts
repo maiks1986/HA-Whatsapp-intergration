@@ -109,9 +109,11 @@ export class WhatsAppInstance {
                 this.sock.ev.on('connection.update', (update) => {
                     console.log(`TRACE [Instance ${this.id}]: Event -> connection.update`, JSON.stringify(update));
                 });
+            }
 
             // Direct listeners for maximum reliability
-            this.sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
+            if (this.sock) {
+                this.sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
                 const { connection, lastDisconnect, qr } = update;
                 console.log(`TRACE [Instance ${this.id}]: connection.update ->`, connection || 'poll');
                 
@@ -209,7 +211,7 @@ export class WhatsAppInstance {
                                 msgCount++;
                             }
                         }
-                        console.log(`TRACE [Instance ${this.id}]: Linked ${msgCount} history messages.`);
+                        console.log(`TRACE [Instance ${this.id}]: Successfully linked ${msgCount} history messages.`);
                     }
                 })();
                 this.io.emit('chat_update', { instanceId: this.id });

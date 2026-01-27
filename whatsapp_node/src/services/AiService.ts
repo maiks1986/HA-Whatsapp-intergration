@@ -8,14 +8,29 @@ class AiService {
         console.log('TRACE [AiService]: getClient() called');
         if (this.genAI) return this.genAI;
         
-        const db = getDb();
-        const apiKey = db.prepare('SELECT value FROM settings WHERE key = ?').get('gemini_api_key') as any;
-        if (!apiKey?.value) {
-            console.warn("TRACE [AiService]: No Gemini API Key found in settings.");
+        // 1. Try reading from HA Options first
+        let apiKey: string | null = null;
+        try {
+            const OPTIONS_PATH = '/data/options.json';
+            if (require('fs').existsSync(OPTIONS_PATH)) {
+                const config = JSON.parse(require('fs').readFileSync(OPTIONS_PATH, 'utf8'));
+                apiKey = config.gemini_api_key;
+            }
+        } catch (e) {}
+
+        // 2. Fallback to Database if HA setting is empty
+        if (!apiKey) {
+            const db = getDb();
+            const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('gemini_api_key') as any;
+            apiKey = row?.value;
+        }
+
+        if (!apiKey) {
+            console.warn("TRACE [AiService]: No Gemini API Key found in HA settings or database.");
             return null;
         }
         
-        this.genAI = new GoogleGenerativeAI(apiKey.value);
+        this.genAI = new GoogleGenerativeAI(apiKey);
         return this.genAI;
     }
 
