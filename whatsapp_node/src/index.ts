@@ -4,6 +4,7 @@ import http from 'http';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { initDatabase, getDb } from './db/database';
 import { engineManager } from './manager/EngineManager';
@@ -152,6 +153,21 @@ async function bootstrap() {
             return res.json({ success: true, token });
         }
         res.status(401).json({ error: "Invalid password" });
+    });
+
+    app.post('/api/auth/ha_login', async (req, res) => {
+        const { haUrl, haToken } = req.body;
+        try {
+            const response = await axios.get(`${haUrl}/api/config`, {
+                headers: { 'Authorization': `Bearer ${haToken}` }
+            });
+            if (response.data && response.data.version) {
+                const token = uuidv4();
+                sessions.set(token, { id: `ha_${response.data.location_name || 'user'}`, isAdmin: true });
+                return res.json({ success: true, token });
+            }
+        } catch (e) {}
+        res.status(401).json({ error: "Invalid HA Credentials" });
     });
 
     const requireAuth = (req: any, res: any, next: any) => {
@@ -310,6 +326,7 @@ async function bootstrap() {
 
     io.on('connection', (socket) => {
         console.log(`TRACE [WebSocket]: Client connected (${socket.id})`);
+        let lastStatusJson = '';
         const interval = setInterval(() => {
             const allInstances = engineManager.getAllInstances();
             if (allInstances.length > 0) {
@@ -318,14 +335,16 @@ async function bootstrap() {
                     status: i.status,
                     qr: i.qr ? 'YES' : 'NO'
                 }));
-                console.log(`TRACE [WebSocket]: Broadcasting status for ${allInstances.length} instances:`, JSON.stringify(status));
+                const currentStatusJson = JSON.stringify(status);
+                if (currentStatusJson !== lastStatusJson) {
+                    console.log(`TRACE [WebSocket]: Broadcasting status change:`, currentStatusJson);
+                    lastStatusJson = currentStatusJson;
+                }
                 socket.emit('instances_status', allInstances.map(i => ({
                     id: i.id,
                     status: i.status,
                     qr: i.qr
                 })));
-            } else {
-                console.log('TRACE [WebSocket]: No instances found to broadcast.');
             }
         }, 2000);
         socket.on('disconnect', () => {

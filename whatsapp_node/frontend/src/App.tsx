@@ -57,6 +57,9 @@ interface Message {
 const App = () => {
   const [authState, setAuthState] = useState<'loading' | 'authenticated' | 'unauthenticated'>('loading');
   const [password, setPassword] = useState('');
+  const [haUrl, setHaUrl] = useState('');
+  const [haToken, setHaToken] = useState('');
+  const [loginMode, setLoginMode] = useState<'direct' | 'ha'>('direct');
   const [instances, setInstances] = useState<Instance[]>([]);
   const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null);
   const [chats, setChats] = useState<Chat[]>([]);
@@ -75,10 +78,10 @@ const App = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    checkAuth();
+    checkAuth(5); // Try up to 5 times
   }, []);
 
-  const checkAuth = async () => {
+  const checkAuth = async (retries = 0) => {
     const localToken = localStorage.getItem('direct_token');
     updateAxiosAuth(localToken);
     try {
@@ -87,25 +90,39 @@ const App = () => {
         setAuthState('authenticated');
         fetchInstances();
         fetchGeminiKey();
+      } else if (retries > 0) {
+        // Backend might still be in 5s settle period
+        setTimeout(() => checkAuth(retries - 1), 2000);
       } else {
         setAuthState('unauthenticated');
       }
     } catch (e) {
-      setAuthState('unauthenticated');
+      if (retries > 0) {
+        setTimeout(() => checkAuth(retries - 1), 2000);
+      } else {
+        setAuthState('unauthenticated');
+      }
     }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await axios.post('/api/auth/login', { password });
-      localStorage.setItem('direct_token', res.data.token);
-      updateAxiosAuth(res.data.token);
+      if (loginMode === 'direct') {
+        const res = await axios.post('/api/auth/login', { password });
+        localStorage.setItem('direct_token', res.data.token);
+        updateAxiosAuth(res.data.token);
+      } else {
+        // HA Token Login
+        const res = await axios.post('/api/auth/ha_login', { haUrl, haToken });
+        localStorage.setItem('direct_token', res.data.token);
+        updateAxiosAuth(res.data.token);
+      }
       setAuthState('authenticated');
       fetchInstances();
       fetchGeminiKey();
     } catch (err) {
-      alert("Invalid Password");
+      alert("Invalid Credentials");
     }
   };
 
@@ -189,7 +206,8 @@ const App = () => {
 
   const fetchMessages = async (instanceId: number, jid: string) => {
     const res = await axios.get(`/api/messages/${instanceId}/${jid}`);
-    setMessages(res.data);
+    const sorted = res.data.sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    setMessages(sorted);
     scrollToBottom();
     if (res.data.length > 0) analyzeIntent(res.data);
   };
@@ -255,8 +273,7 @@ const App = () => {
       });
       setInputText('');
       setSteerText('');
-      fetchMessages(selectedInstance.id, selectedChat.jid);
-      fetchChats(selectedInstance.id);
+      // UI will update via socket event
     } catch (e) {
       alert("Failed to send");
     }
@@ -267,13 +284,29 @@ const App = () => {
   if (authState === 'unauthenticated') {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-whatsapp-bg">
-        <form onSubmit={handleLogin} className="bg-white p-10 rounded-2xl shadow-2xl w-[400px] text-center border-t-8 border-teal-600">
+        <div className="bg-white p-10 rounded-2xl shadow-2xl w-[450px] text-center border-t-8 border-teal-600">
           <div className="w-20 h-20 bg-teal-50 rounded-full flex items-center justify-center mx-auto mb-6"><Lock size={32} className="text-teal-600" /></div>
           <h1 className="text-2xl font-bold text-slate-800 mb-2">WhatsApp Pro</h1>
-          <p className="text-sm text-slate-500 mb-8 font-medium">Enter your direct access password</p>
-          <input autoFocus type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-teal-500 focus:bg-white transition-all mb-6 text-center" />
-          <button type="submit" className="w-full bg-teal-600 text-white p-4 rounded-xl font-bold hover:bg-teal-700 shadow-lg shadow-teal-600/20 transition-all active:scale-[0.98]">Login</button>
-        </form>
+          
+          <div className="flex gap-4 mb-8 justify-center border-b border-slate-100">
+            <button onClick={() => setLoginMode('direct')} className={`pb-2 text-sm font-bold transition-all ${loginMode === 'direct' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-slate-400'}`}>Password</button>
+            <button onClick={() => setLoginMode('ha')} className={`pb-2 text-sm font-bold transition-all ${loginMode === 'ha' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-slate-400'}`}>Home Assistant</button>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            {loginMode === 'direct' ? (
+              <input autoFocus type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Direct Access Password" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-teal-500 focus:bg-white transition-all text-center" />
+            ) : (
+              <>
+                <input autoFocus placeholder="HA URL (e.g. http://192.168.1.10:8123)" value={haUrl} onChange={e => setHaUrl(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-teal-500 focus:bg-white transition-all text-sm" />
+                <input type="password" placeholder="Long-Lived Access Token" value={haToken} onChange={e => setHaToken(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-teal-500 focus:bg-white transition-all text-sm" />
+              </>
+            )}
+            <button type="submit" className="w-full bg-teal-600 text-white p-4 rounded-xl font-bold hover:bg-teal-700 shadow-lg shadow-teal-600/20 transition-all active:scale-[0.98]">
+              {loginMode === 'ha' ? 'Login with HA' : 'Login'}
+            </button>
+          </form>
+        </div>
       </div>
     );
   }
