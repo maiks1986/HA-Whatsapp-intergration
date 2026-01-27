@@ -159,44 +159,61 @@ export class WhatsAppInstance {
                     saveCreds();
                 });
 
-                this.sock.ev.on('messaging-history.set', async (payload: any) => {
-                    const { chats, contacts, messages } = payload;
-                    console.log(`TRACE [Instance ${this.id}]: HistorySet -> Chats: ${chats?.length || 0}, Contacts: ${contacts?.length || 0}, Messages: ${messages?.length || 0}`);
-                    
-                    dbInstance.transaction(() => {
-                        if (contacts) {
-                            for (const contact of contacts) {
-                                if (isJidValid(contact.id)) {
-                                    const name = contact.name || contact.notify;
-                                    if (name) upsertContact.run(this.id, contact.id, name);
-                                    else dbInstance.prepare('INSERT OR IGNORE INTO contacts (instance_id, jid, name) VALUES (?, ?, ?)').run(this.id, contact.id, contact.id.split('@')[0]);
+            this.sock.ev.on('messaging-history.set', async (payload: any) => {
+                const { chats, contacts, messages } = payload;
+                console.log(`TRACE [Instance ${this.id}]: HistorySet -> Chats: ${chats?.length || 0}, Contacts: ${contacts?.length || 0}, Messages: ${messages?.length || 0}`);
+                
+                dbInstance.transaction(() => {
+                    // 1. Process Contacts
+                    if (contacts) {
+                        for (const contact of contacts) {
+                            if (!isJidValid(contact.id)) continue;
+                            const name = contact.name || contact.notify;
+                            if (name) upsertContact.run(this.id, contact.id, name);
+                            else dbInstance.prepare('INSERT OR IGNORE INTO contacts (instance_id, jid, name) VALUES (?, ?, ?)').run(this.id, contact.id, contact.id.split('@')[0]);
+                        }
+                    }
+
+                    // 2. Process Messages and track the latest one per chat for the preview
+                    const latestMsgs = new Map<string, { text: string, ts: string }>();
+                    if (messages) {
+                        let msgCount = 0;
+                        for (const msg of messages) {
+                            const text = getMessageText(msg);
+                            if (text && isJidValid(msg.key.remoteJid!)) {
+                                const jid = msg.key.remoteJid!;
+                                const ts = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
+                                
+                                // Store message
+                                insertMessage.run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
+                                msgCount++;
+
+                                // Track latest for preview
+                                if (!latestMsgs.has(jid) || ts > latestMsgs.get(jid)!.ts) {
+                                    latestMsgs.set(jid, { text, ts });
                                 }
                             }
                         }
-                        if (chats) {
-                            for (const chat of chats) {
-                                if (!isJidValid(chat.id)) continue;
-                                const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
-                                const isoTs = ts ? new Date(Number(ts) * 1000).toISOString() : null;
-                                upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, isoTs);
+                        console.log(`TRACE [Instance ${this.id}]: Imported ${msgCount} history messages`);
+                    }
+
+                    // 3. Process Chats with the identified latest message
+                    if (chats) {
+                        for (const chat of chats) {
+                            if (!isJidValid(chat.id)) continue;
+                            const preview = latestMsgs.get(chat.id);
+                            const ts = preview?.ts || (chat.conversationTimestamp ? new Date(Number(chat.conversationTimestamp) * 1000).toISOString() : null);
+                            
+                            upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, ts);
+                            
+                            if (preview) {
+                                dbInstance.prepare('UPDATE chats SET last_message_text = ? WHERE instance_id = ? AND jid = ?').run(preview.text, this.id, chat.id);
                             }
                         }
-                        if (messages) {
-                            let msgCount = 0;
-                            for (const msg of messages) {
-                                const text = getMessageText(msg);
-                                if (text && isJidValid(msg.key.remoteJid!)) {
-                                    const jid = msg.key.remoteJid!;
-                                    const ts = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
-                                    upsertChat.run(this.id, jid, msg.pushName || jid.split('@')[0], 0, ts);
-                                    insertMessage.run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
-                                    msgCount++;
-                                }
-                            }
-                            console.log(`TRACE [Instance ${this.id}]: Imported ${msgCount} history messages`);
-                        }
-                    })();
-                });
+                    }
+                })();
+                console.log(`TRACE [Instance ${this.id}]: HistorySet Sync Complete`);
+            });
 
                 this.sock.ev.on('messages.upsert', (m: any) => {
                     if (m.type === 'notify') {
