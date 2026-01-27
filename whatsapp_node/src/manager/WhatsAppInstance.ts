@@ -281,6 +281,7 @@ export class WhatsAppInstance {
     }
 
     private stopSyncWatchdog() {
+        console.log(`TRACE [Instance ${this.id}]: stopSyncWatchdog() called`);
         if (this.watchdogTimer) {
             clearTimeout(this.watchdogTimer);
             this.watchdogTimer = null;
@@ -288,6 +289,7 @@ export class WhatsAppInstance {
     }
 
     async sendMessage(jid: string, text: string) {
+        console.log(`TRACE [Instance ${this.id}]: sendMessage(${jid}) called`);
         if (!this.sock || this.status !== 'connected') throw new Error("Instance not connected");
         await this.sock.sendMessage(jid, { text });
         
@@ -305,6 +307,7 @@ export class WhatsAppInstance {
     }
 
     async deleteAuth() {
+        console.log(`TRACE [Instance ${this.id}]: deleteAuth() called`);
         this.stopSyncWatchdog();
         if (this.sock) {
             try { await this.sock.logout(); } catch (e) {}
@@ -317,6 +320,7 @@ export class WhatsAppInstance {
     }
 
     async close() {
+        console.log(`TRACE [Instance ${this.id}]: close() called`);
         this.stopSyncWatchdog();
         if (this.sock) {
             this.sock.end(undefined);

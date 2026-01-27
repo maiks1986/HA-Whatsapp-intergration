@@ -5,12 +5,13 @@ class AiService {
     private genAI: GoogleGenerativeAI | null = null;
 
     private async getClient() {
+        console.log('TRACE [AiService]: getClient() called');
         if (this.genAI) return this.genAI;
         
         const db = getDb();
         const apiKey = db.prepare('SELECT value FROM settings WHERE key = ?').get('gemini_api_key') as any;
         if (!apiKey?.value) {
-            console.warn("AI Service: No Gemini API Key found in settings.");
+            console.warn("TRACE [AiService]: No Gemini API Key found in settings.");
             return null;
         }
         
@@ -19,6 +20,7 @@ class AiService {
     }
 
     async analyzeIntent(messages: any[]) {
+        console.log(`TRACE [AiService]: analyzeIntent() called with ${messages.length} messages`);
         const client = await this.getClient();
         if (!client) return "API Key Missing";
 
@@ -38,11 +40,13 @@ class AiService {
             const result = await model.generateContent(prompt);
             return result.response.text().trim();
         } catch (e) {
+            console.error('TRACE [AiService]: analyzeIntent error:', e);
             return "Analysis Error";
         }
     }
 
     async generateDraft(messages: any[], steer: string) {
+        console.log(`TRACE [AiService]: generateDraft() called with ${messages.length} messages. Steer: ${steer}`);
         const client = await this.getClient();
         if (!client) return "API Key Missing";
 
@@ -64,12 +68,14 @@ class AiService {
             const result = await model.generateContent(prompt);
             return result.response.text().trim();
         } catch (e) {
+            console.error('TRACE [AiService]: generateDraft error:', e);
             return "Draft Error";
         }
     }
 
     // Force re-init if key changes
     reset() {
+        console.log('TRACE [AiService]: reset() called');
         this.genAI = null;
     }
 }

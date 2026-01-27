@@ -10,13 +10,15 @@ let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
     if (!db) {
-        db = new Database(DB_PATH, { timeout: 10000 }); // Added 10s timeout for I/O waits
-        db.pragma('journal_mode = WAL'); // Use Write-Ahead Logging for better concurrency
+        console.log('TRACE [Database]: Opening connection to', DB_PATH);
+        db = new Database(DB_PATH, { timeout: 10000 }); 
+        db.pragma('journal_mode = WAL'); 
     }
     return db;
 }
 
 export function initDatabase() {
+    console.log('TRACE [Database]: Initializing tables...');
     const database = getDb();
     
     database.exec(`
