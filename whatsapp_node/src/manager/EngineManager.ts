@@ -36,8 +36,9 @@ class EngineManager {
     }
 
     getAllInstances() {
-        console.log('TRACE [EngineManager]: getAllInstances() called');
-        return Array.from(this.instances.values());
+        const list = Array.from(this.instances.values());
+        console.log(`TRACE [EngineManager]: getAllInstances() called. Returning ${list.length} instances: [${list.map(i => `${i.id}:${i.name}`).join(', ')}]`);
+        return list;
     }
 
     async stopInstance(id: number) {

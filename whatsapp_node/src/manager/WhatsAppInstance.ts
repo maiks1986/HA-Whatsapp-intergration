@@ -87,7 +87,7 @@ export class WhatsAppInstance {
 
             const getMessageText = (m: any) => {
                 const msg = m.message;
-                if (!msg) return null;
+                if (!msg) return "";
                 return msg.conversation || 
                        msg.extendedTextMessage?.text || 
                        msg.imageMessage?.caption || 
@@ -95,7 +95,7 @@ export class WhatsAppInstance {
                        msg.templateButtonReplyMessage?.selectedDisplayText ||
                        msg.buttonsResponseMessage?.selectedDisplayText ||
                        msg.listResponseMessage?.title ||
-                       null;
+                       "";
             };
 
             const isJidValid = (jid: string) => {
@@ -103,140 +103,131 @@ export class WhatsAppInstance {
             };
 
             if (this.sock) {
-                (this.sock as any).ev.process(async (events: any) => {
-                    // ... (connection and creds logic)
-                    if (events['connection.update']) {
-                        const update = events['connection.update'];
-                        const { connection, lastDisconnect, qr } = update;
-                        if (qr) {
-                            this.qr = await qrcode.toDataURL(qr);
-                            this.status = 'qr_ready';
-                        }
-                        if (connection === 'open') {
-                            console.log(`TRACE [Instance ${this.id}]: Connection OPEN`);
-                            this.status = 'connected';
-                            this.qr = null;
-                            dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
-                            
-                            // Check if we need to force a re-sync
-                            const row = dbInstance.prepare('SELECT COUNT(*) as count FROM chats WHERE instance_id = ?').get(this.id) as any;
-                            const isEmpty = row?.count === 0;
-                            if (isEmpty) {
-                                console.log(`TRACE [Instance ${this.id}]: Database is empty. Triggering fast sync check...`);
-                            }
+                // Catch-all tracer for raw events
+                this.sock.ev.on('connection.update', (update) => {
+                    console.log(`TRACE [Instance ${this.id}]: Event -> connection.update`, JSON.stringify(update));
+                });
 
-                            this.startSyncWatchdog(isEmpty);
-                        }
-                        if (connection === 'close') {
-                            const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-                            this.status = 'disconnected';
-                            this.sock = null;
-                            this.stopSyncWatchdog();
-                            dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
-                            if (statusCode === DisconnectReason.loggedOut) {
-                                console.log(`TRACE [Instance ${this.id}]: Session logged out. Clearing auth and forcing new QR...`);
-                                await this.deleteAuth();
-                                await this.init();
-                            } else {
-                                if (this.isReconnecting) return;
-                                this.isReconnecting = true;
-                                setTimeout(async () => { this.isReconnecting = false; await this.init(); }, 5000);
-                            }
-                        }
+                this.sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
+                    const { connection, lastDisconnect, qr } = update;
+                    if (qr) {
+                        this.qr = await qrcode.toDataURL(qr);
+                        this.status = 'qr_ready';
                     }
-
-                    if (events['creds.update']) saveCreds();
-
-                    // Aggressive Chat & Message Discovery
-                    if (events['messaging-history.set']) {
-                        const { chats, contacts, messages } = events['messaging-history.set'];
-                        console.log(`TRACE [Instance ${this.id}]: History Set -> Chats: ${chats?.length || 0}, Contacts: ${contacts?.length || 0}, Messages: ${messages?.length || 0}`);
+                    if (connection === 'open') {
+                        console.log(`TRACE [Instance ${this.id}]: Connection OPEN`);
+                        this.status = 'connected';
+                        this.qr = null;
+                        dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
                         
-                                                dbInstance.transaction(() => {
-                                                    // 1. Process Contacts (just for identity)
-                                                    if (contacts) {
-                                                        for (const contact of contacts) {
-                                                            if (isJidValid(contact.id)) {
-                                                                const name = contact.name || contact.notify;
-                                                                if (name) {
-                                                                    upsertContact.run(this.id, contact.id, name);
-                                                                } else {
-                                                                    // Only insert number if it doesn't exist yet
-                                                                    dbInstance.prepare('INSERT OR IGNORE INTO contacts (instance_id, jid, name) VALUES (?, ?, ?)').run(this.id, contact.id, contact.id.split('@')[0]);
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    if (chats) {
-                                for (const chat of chats) {
-                                    if (!isJidValid(chat.id)) continue;
-                                    const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
-                                    const isoTs = ts ? new Date(Number(ts) * 1000).toISOString() : null;
-                                    upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, isoTs);
-                                }
-                            }
-
-                            if (messages) {
-                                let msgCount = 0;
-                                for (const msg of messages) {
-                                    const text = getMessageText(msg);
-                                    if (text && isJidValid(msg.key.remoteJid!)) {
-                                        const jid = msg.key.remoteJid!;
-                                        const ts = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
-                                        upsertChat.run(this.id, jid, msg.pushName || jid.split('@')[0], 0, ts);
-                                        insertMessage.run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
-                                        msgCount++;
-                                    }
-                                }
-                                console.log(`TRACE [Instance ${this.id}]: Imported ${msgCount} historical messages`);
-                            }
-                        })();
+                        const row = dbInstance.prepare('SELECT COUNT(*) as count FROM chats WHERE instance_id = ?').get(this.id) as any;
+                        const isEmpty = row?.count === 0;
+                        if (isEmpty) console.log(`TRACE [Instance ${this.id}]: DB Empty. Triggering fast sync watchdog.`);
+                        this.startSyncWatchdog(isEmpty);
                     }
+                    if (connection === 'close') {
+                        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+                        console.log(`TRACE [Instance ${this.id}]: Connection CLOSED (Status: ${statusCode})`);
+                        this.status = 'disconnected';
+                        this.sock = null;
+                        this.stopSyncWatchdog();
+                        dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
+                        if (statusCode === DisconnectReason.loggedOut) {
+                            console.log(`TRACE [Instance ${this.id}]: Logged out. Wiping session...`);
+                            await this.deleteAuth();
+                            await this.init();
+                        } else {
+                            if (this.isReconnecting) return;
+                            this.isReconnecting = true;
+                            setTimeout(async () => { this.isReconnecting = false; await this.init(); }, 5000);
+                        }
+                    }
+                });
 
-                    if ((events as any)['chats.set']) {
-                        const chats = (events as any)['chats.set'].chats;
-                        if (chats) dbInstance.transaction(() => {
-                            for (const chat of chats) {
-                                if (!isJidValid(chat.id)) continue;
-                                const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
-                                if (ts) {
-                                    const isoTs = new Date(Number(ts) * 1000).toISOString();
-                                    upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, isoTs);
+                this.sock.ev.on('creds.update', () => {
+                    console.log(`TRACE [Instance ${this.id}]: creds.update`);
+                    saveCreds();
+                });
+
+                this.sock.ev.on('messaging-history.set', async (payload: any) => {
+                    const { chats, contacts, messages } = payload;
+                    console.log(`TRACE [Instance ${this.id}]: HistorySet -> Chats: ${chats?.length || 0}, Contacts: ${contacts?.length || 0}, Messages: ${messages?.length || 0}`);
+                    
+                    dbInstance.transaction(() => {
+                        if (contacts) {
+                            for (const contact of contacts) {
+                                if (isJidValid(contact.id)) {
+                                    const name = contact.name || contact.notify;
+                                    if (name) upsertContact.run(this.id, contact.id, name);
+                                    else dbInstance.prepare('INSERT OR IGNORE INTO contacts (instance_id, jid, name) VALUES (?, ?, ?)').run(this.id, contact.id, contact.id.split('@')[0]);
                                 }
                             }
-                        })();
-                    }
-
-                    if (events['chats.upsert']) {
-                        const chats = events['chats.upsert'];
-                        dbInstance.transaction(() => {
+                        }
+                        if (chats) {
                             for (const chat of chats) {
                                 if (!isJidValid(chat.id)) continue;
                                 const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
                                 const isoTs = ts ? new Date(Number(ts) * 1000).toISOString() : null;
                                 upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, isoTs);
                             }
-                        })();
-                    }
-
-                    if (events['messages.upsert']) {
-                        const m = events['messages.upsert'];
-                        if (m.type === 'notify') {
-                            for (const msg of m.messages) {
+                        }
+                        if (messages) {
+                            let msgCount = 0;
+                            for (const msg of messages) {
                                 const text = getMessageText(msg);
                                 if (text && isJidValid(msg.key.remoteJid!)) {
                                     const jid = msg.key.remoteJid!;
                                     const ts = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
-                                    
-                                    // Ensure chat exists
                                     upsertChat.run(this.id, jid, msg.pushName || jid.split('@')[0], 0, ts);
                                     insertMessage.run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
-
-                                    dbInstance.prepare(`UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ?`).run(text, ts, this.id, jid);
+                                    msgCount++;
                                 }
+                            }
+                            console.log(`TRACE [Instance ${this.id}]: Imported ${msgCount} history messages`);
+                        }
+                    })();
+                });
+
+                this.sock.ev.on('messages.upsert', (m: any) => {
+                    if (m.type === 'notify') {
+                        console.log(`TRACE [Instance ${this.id}]: messages.upsert (${m.messages.length} msgs)`);
+                        for (const msg of m.messages) {
+                            const text = getMessageText(msg);
+                            if (text && isJidValid(msg.key.remoteJid!)) {
+                                const jid = msg.key.remoteJid!;
+                                const ts = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
+                                upsertChat.run(this.id, jid, msg.pushName || jid.split('@')[0], 0, ts);
+                                insertMessage.run(this.id, jid, msg.key.participant || jid, msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
+                                dbInstance.prepare(`UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ?`).run(text, ts, this.id, jid);
                             }
                         }
                     }
+                });
+
+                // Extra fallback listeners for individual updates
+                const evAny = this.sock.ev as any;
+                evAny.on('chats.upsert', (chats: any[]) => {
+                    console.log(`TRACE [Instance ${this.id}]: chats.upsert (${chats.length} items)`);
+                    dbInstance.transaction(() => {
+                        for (const chat of chats) {
+                            if (!isJidValid(chat.id)) continue;
+                            const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
+                            const isoTs = ts ? new Date(Number(ts) * 1000).toISOString() : null;
+                            upsertChat.run(this.id, chat.id, chat.name || chat.id.split('@')[0], chat.unreadCount || 0, isoTs);
+                        }
+                    })();
+                });
+
+                evAny.on('contacts.upsert', (contacts: any[]) => {
+                    console.log(`TRACE [Instance ${this.id}]: contacts.upsert (${contacts.length} items)`);
+                    dbInstance.transaction(() => {
+                        for (const contact of contacts) {
+                            if (isJidValid(contact.id)) {
+                                const name = contact.name || contact.notify;
+                                if (name) upsertContact.run(this.id, contact.id, name);
+                            }
+                        }
+                    })();
                 });
             }
         } catch (err) {
