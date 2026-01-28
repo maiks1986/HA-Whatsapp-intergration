@@ -81,8 +81,8 @@ export class WhatsAppInstance {
                 browser: Browsers.ubuntu('Chrome'),
                 syncFullHistory: true,
                 markOnlineOnConnect: this.presence === 'available',
-                connectTimeoutMs: 60000,
-                defaultQueryTimeoutMs: 120000,
+                connectTimeoutMs: 600000,
+                defaultQueryTimeoutMs: 600000,
                 logger: logger as any
             });
 
