@@ -16,8 +16,19 @@ export const messagingRouter = () => {
         if (!user.isAdmin && instanceData?.ha_user_id !== user.id) return res.status(403).json({ error: "Access Denied" });
 
         const chats = db.prepare(`
-            SELECT c.jid, c.name, c.unread_count, c.last_message_text, c.last_message_timestamp, c.is_archived, c.is_pinned
-            FROM chats c WHERE c.instance_id = ? AND c.jid NOT LIKE '%@broadcast'
+            SELECT 
+                c.jid, 
+                COALESCE(co.name, c.name, c.jid) as name, 
+                c.unread_count, 
+                c.last_message_text, 
+                c.last_message_timestamp,
+                c.is_archived,
+                c.is_pinned
+            FROM chats c
+            LEFT JOIN contacts co ON c.jid = co.jid AND c.instance_id = co.instance_id
+            WHERE c.instance_id = ? 
+              AND c.jid NOT LIKE '%@broadcast'
+              AND (c.last_message_timestamp IS NOT NULL OR c.is_pinned = 1 OR c.unread_count > 0)
             ORDER BY c.is_pinned DESC, c.last_message_timestamp DESC
         `).all(instanceId) as Chat[];
         res.json(chats);

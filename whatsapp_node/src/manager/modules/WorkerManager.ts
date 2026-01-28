@@ -51,12 +51,12 @@ export class WorkerManager {
                 const oldestKey = oldest ? { id: oldest.whatsapp_id, remoteJid: chat.jid, fromMe: !!oldest.is_from_me } : undefined;
                 const oldestTs = oldest ? Math.floor(new Date(oldest.timestamp).getTime()/1000) : 0;
 
-                const result = await this.sock.fetchMessageHistory(50, oldestKey as any, oldestTs);
+                const result = await this.sock.fetchMessageHistory(100, oldestKey as any, oldestTs);
                 if (!result || result === '') {
                     db.prepare('UPDATE chats SET is_fully_synced = 1 WHERE instance_id = ? AND jid = ?').run(this.instanceId, chat.jid);
                 }
             } catch (e) {}
-        }, 30000);
+        }, 15000);
     }
 
     private startAutoNudgeWorker() {

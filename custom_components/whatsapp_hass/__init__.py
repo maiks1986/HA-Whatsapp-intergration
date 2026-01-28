@@ -31,7 +31,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         name="WhatsApp Node Engine",
         manufacturer="Maiks86",
         model="Ultimate Multi-Instance",
-        sw_version="1.8.3"
+        sw_version="1.8.4"
     )
 
     async def engine_api_call(method: str, path: str, data: dict = None):
