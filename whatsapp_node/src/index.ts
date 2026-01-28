@@ -109,68 +109,74 @@ async function bootstrap() {
     
     await engineManager.init(io, debugEnabled);
 
-    app.use((req, res, next) => {
-        console.log(`TRACE [Server]: Incoming ${req.method} ${req.path}`);
-        const userId = req.headers['x-hass-user-id'] as string;
-        const isAdmin = req.headers['x-hass-is-admin'] === '1' || req.headers['x-hass-is-admin'] === 'true';
-        
-        if (userId) {
-            console.log(`AUTH: User ${userId} authenticated via Ingress (Admin: ${isAdmin})`);
-            (req as any).haUser = { id: userId, isAdmin, source: 'ingress' };
-            return next();
-        }
-
-        const authHeader = req.headers['authorization'];
-        const token = authHeader?.split(' ')[1];
-        if (token && sessions.has(token)) {
-            const session = sessions.get(token);
-            console.log(`AUTH: User ${session!.id} authenticated via Direct Token`);
-            (req as any).haUser = { id: session!.id, isAdmin: session!.isAdmin, source: 'direct' };
-            return next();
-        }
-
-        console.log(`AUTH: Unauthenticated request to ${req.path}`);
-        console.log('DEBUG: Request Headers:', JSON.stringify(req.headers));
-        (req as any).haUser = null;
-        next();
-    });
-
-    app.get('/api/auth/status', (req, res) => {
-        const user = (req as any).haUser;
-        res.json({ 
-            authenticated: !!user,
-            source: user?.source || null,
-            isAdmin: user?.isAdmin || false,
-            needsPassword: !user && getAddonConfig().password !== ""
+        app.use((req, res, next) => {
+            console.log(`TRACE [Server]: Incoming ${req.method} ${req.path}`);
+            const userId = req.headers['x-hass-user-id'] as string;
+            const isAdmin = req.headers['x-hass-is-admin'] === '1' || req.headers['x-hass-is-admin'] === 'true';
+            
+            // 1. Check for Ingress Headers (Auto-Login)
+            if (userId) {
+                console.log(`AUTH: User ${userId} authenticated via Ingress (Admin: ${isAdmin})`);
+                (req as any).haUser = { id: userId, isAdmin, source: 'ingress' } as AuthUser;
+                return next();
+            }
+    
+            // 2. Check for Session Cookie
+            const cookieToken = req.headers.cookie?.split('; ').find(row => row.startsWith('direct_token='))?.split('=')[1];
+            
+            // 3. Check for Auth Header (Backwards compatibility)
+            const authHeader = req.headers['authorization'];
+            const token = cookieToken || authHeader?.split(' ')[1];
+    
+            if (token && sessions.has(token)) {
+                const session = sessions.get(token);
+                console.log(`AUTH: User ${session!.id} authenticated via Token`);
+                (req as any).haUser = { id: session!.id, isAdmin: session!.isAdmin, source: 'direct' } as AuthUser;
+                return next();
+            }
+    
+            console.log(`AUTH: Unauthenticated request to ${req.path}`);
+            (req as any).haUser = null;
+            next();
         });
-    });
-
-    app.post('/api/auth/login', (req, res) => {
-        const { password } = req.body;
-        const config = getAddonConfig();
-        if (config.password && password === config.password) {
-            const token = uuidv4();
-            sessions.set(token, { id: 'direct_admin', isAdmin: true });
-            return res.json({ success: true, token });
-        }
-        res.status(401).json({ error: "Invalid password" });
-    });
-
-    app.post('/api/auth/ha_login', async (req, res) => {
-        const { haUrl, haToken } = req.body;
-        try {
-            const response = await axios.get(`${haUrl}/api/config`, {
-                headers: { 'Authorization': `Bearer ${haToken}` }
+    
+        app.get('/api/auth/status', (req, res) => {
+            const user = (req as any).haUser as AuthUser | null;
+            res.json({ 
+                authenticated: !!user,
+                source: user?.source || null,
+                isAdmin: user?.isAdmin || false,
+                needsPassword: !user && getAddonConfig().password !== ""
             });
-            if (response.data && response.data.version) {
+        });
+    
+        app.post('/api/auth/login', (req, res) => {
+            const { password } = req.body;
+            const config = getAddonConfig();
+            if (config.password && password === config.password) {
                 const token = uuidv4();
-                sessions.set(token, { id: `ha_${response.data.location_name || 'user'}`, isAdmin: true });
+                sessions.set(token, { id: 'direct_admin', isAdmin: true });
+                res.cookie('direct_token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: false });
                 return res.json({ success: true, token });
             }
-        } catch (e) {}
-        res.status(401).json({ error: "Invalid HA Credentials" });
-    });
-
+            res.status(401).json({ error: "Invalid password" });
+        });
+    
+        app.post('/api/auth/ha_login', async (req, res) => {
+            const { haUrl, haToken } = req.body;
+            try {
+                const response = await axios.get(`${haUrl}/api/config`, {
+                    headers: { 'Authorization': `Bearer ${haToken}` }
+                });
+                if (response.data && response.data.version) {
+                    const token = uuidv4();
+                    sessions.set(token, { id: `ha_${response.data.location_name || 'user'}`, isAdmin: true });
+                    res.cookie('direct_token', token, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: false });
+                    return res.json({ success: true, token });
+                }
+            } catch (e) {}
+            res.status(401).json({ error: "Invalid HA Credentials" });
+        });
     const requireAuth = (req: any, res: any, next: any) => {
         if (!req.haUser) return res.status(401).json({ error: "Unauthorized" });
         next();

@@ -105,8 +105,6 @@ export class WhatsAppInstance {
 
             const normalizeJid = (jid: string) => {
                 if (!jid) return jid;
-                // user:1@s.whatsapp.net -> user@s.whatsapp.net
-                // user:1@lid -> user@lid
                 let normalized = jid;
                 if (jid.includes(':')) {
                     normalized = jid.replace(/:[0-9]+@/, '@');
@@ -126,6 +124,42 @@ export class WhatsAppInstance {
             };
 
             if (this.sock) {
+                const evAny = this.sock.ev as any;
+
+                // 1. ROBUST CATCH-ALL (Must be first to capture sync)
+                const safeStringify = (obj: any) => {
+                    const cache = new Set();
+                    return JSON.stringify(obj, (key, value) => {
+                        if (typeof value === 'object' && value !== null) {
+                            if (cache.has(value)) return '[Circular]';
+                            cache.add(value);
+                        }
+                        return value;
+                    });
+                };
+
+                evAny.on('events', (events: any) => {
+                    try {
+                        const logPath = process.env.NODE_ENV === 'development' ? './raw_events.log' : '/data/raw_events.log';
+                        const logEntry = safeStringify({ timestamp: new Date().toISOString(), instanceId: this.id, events });
+                        
+                        // Disk log
+                        fs.appendFileSync(logPath, logEntry + '\n');
+
+                        // Live stream (only if payload is reasonable size < 50KB to avoid socket hang)
+                        if (logEntry.length < 50000) {
+                            this.io.emit('raw_whatsapp_event', JSON.parse(logEntry));
+                        } else {
+                            this.io.emit('raw_whatsapp_event', { 
+                                timestamp: new Date().toISOString(), 
+                                instanceId: this.id, 
+                                events: { info: "Event payload too large for live stream. Check disk logs.", types: Object.keys(events) } 
+                            });
+                        }
+                    } catch (e) {}
+                });
+
+                // 2. Standard Logic Handlers
                 this.sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
                     const { connection, lastDisconnect, qr } = update;
                     if (qr) {
@@ -208,7 +242,6 @@ export class WhatsAppInstance {
                     }
                 });
 
-                const evAny = this.sock.ev as any;
                 evAny.on('chats.upsert', (chats: any[]) => {
                     dbInstance.transaction(() => {
                         for (const chat of chats) {
@@ -234,24 +267,6 @@ export class WhatsAppInstance {
                     })();
                     this.io.emit('chat_update', { instanceId: this.id });
                 });
-
-                // Standard way to capture EVERY event in Baileys
-                this.sock.ev.process(async (events) => {
-                    const logEntry = JSON.stringify({ 
-                        timestamp: new Date().toISOString(), 
-                        instanceId: this.id, 
-                        events 
-                    });
-                    
-                    // 1. Live stream
-                    this.io.emit('raw_whatsapp_event', JSON.parse(logEntry));
-
-                    // 2. Disk log
-                    try {
-                        const logPath = process.env.NODE_ENV === 'development' ? './raw_events.log' : '/data/raw_events.log';
-                        fs.appendFileSync(logPath, logEntry + '\n');
-                    } catch (e) {}
-                });
             }
         } catch (err) {
             console.error(`TRACE [Instance ${this.id}]: FATAL ERROR during init:`, err);
@@ -263,7 +278,6 @@ export class WhatsAppInstance {
         console.log(`TRACE [Instance ${this.id}]: Starting background naming worker...`);
         this.namingWorker = setInterval(async () => {
             const db = getDb();
-            // Find chats that still look like JIDs or Unnamed
             const unnamed = db.prepare(`
                 SELECT jid, name FROM chats 
                 WHERE instance_id = ? AND (name LIKE '%@s.whatsapp.net' OR name = 'Unnamed Group' OR name IS NULL OR name = '')
