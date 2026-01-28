@@ -9,20 +9,20 @@ export interface Instance {
 }
 
 export interface Contact {
-    instance_id: number;
+    instance_id?: number;
     jid: string;
     name: string;
 }
 
 export interface Chat {
-    instance_id: number;
+    instance_id?: number;
     jid: string;
     name: string;
     unread_count: number;
     last_message_text?: string | null;
     last_message_timestamp?: string | null;
-    is_archived?: number;
-    is_pinned?: number;
+    is_archived: number;
+    is_pinned: number;
 }
 
 export interface Message {
@@ -45,15 +45,25 @@ export interface Message {
     reactions?: Array<{ sender_jid: string, emoji: string }>;
 }
 
-export interface AuthUser {
-    id: string;
-    isAdmin: boolean;
-    source: 'ingress' | 'direct';
+export interface StatusUpdate {
+    id: number;
+    instance_id: number;
+    sender_jid: string;
+    sender_name: string;
+    type: string;
+    text: string;
+    media_path?: string | null;
+    timestamp: string;
 }
 
-export interface AddonConfig {
-    password?: string;
-    debug_logging?: boolean | string;
-    reset_database?: boolean | string;
-    gemini_api_key?: string;
+export interface AuthStatusResponse {
+    authenticated: boolean;
+    source: 'ingress' | 'direct' | null;
+    isAdmin: boolean;
+    needsPassword: boolean;
+}
+
+export interface LoginResponse {
+    success: boolean;
+    token: string;
 }

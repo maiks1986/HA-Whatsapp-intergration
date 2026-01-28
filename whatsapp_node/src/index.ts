@@ -10,6 +10,7 @@ import { initDatabase, getDb } from './db/database';
 import { engineManager } from './manager/EngineManager';
 import { aiService } from './services/AiService';
 import { AddonConfig, AuthUser, Instance, Chat, Message } from './types';
+import { normalizeJid } from './utils';
 
 process.on('uncaughtException', (err) => {
     console.error('CRITICAL: Uncaught Exception:', err);
@@ -40,6 +41,9 @@ app.use(express.json());
 
 const PUBLIC_PATH = path.join(__dirname, 'public');
 app.use(express.static(PUBLIC_PATH));
+
+const MEDIA_PATH = process.env.NODE_ENV === 'development' ? path.join(__dirname, '../media') : '/data/media';
+app.use('/media', express.static(MEDIA_PATH));
 
 const PORT = 5002;
 const OPTIONS_PATH = '/data/options.json';
@@ -208,11 +212,13 @@ async function bootstrap() {
                 c.name, 
                 c.unread_count, 
                 c.last_message_text, 
-                c.last_message_timestamp
+                c.last_message_timestamp,
+                c.is_archived,
+                c.is_pinned
             FROM chats c
             WHERE c.instance_id = ? 
               AND c.jid NOT LIKE '%@broadcast'
-            ORDER BY c.last_message_timestamp DESC
+            ORDER BY c.is_pinned DESC, c.last_message_timestamp DESC
         `).all(instanceId) as Chat[];
         console.log(`API: Returning ${chats.length} active chats`);
         res.json(chats);
@@ -243,6 +249,75 @@ async function bootstrap() {
         const instance = engineManager.getInstance(parseInt(id));
         if (!instance) return res.status(404).json({ error: "Not found" });
         await instance.setPresence(presence);
+        res.json({ success: true });
+    });
+
+    // --- PHASE 2 SOCIAL ENDPOINTS ---
+    app.get('/api/status/:instanceId', requireAuth, (req, res) => {
+        const { instanceId } = req.params;
+        const updates = db.prepare('SELECT * FROM status_updates WHERE instance_id = ? ORDER BY timestamp DESC LIMIT 100').all(instanceId);
+        res.json(updates);
+    });
+
+    app.post('/api/groups/:instanceId', requireAuth, async (req, res) => {
+        const { instanceId } = req.params;
+        const { title, participants } = req.body;
+        const inst = engineManager.getInstance(parseInt(instanceId));
+        if (!inst) return res.status(404).json({ error: "Not found" });
+        const group = await inst.createGroup(title, participants);
+        res.json(group);
+    });
+
+    app.patch('/api/groups/:instanceId/:jid/participants', requireAuth, async (req, res) => {
+        const { instanceId, jid } = req.params;
+        const { action, participants } = req.body;
+        const inst = engineManager.getInstance(parseInt(instanceId));
+        if (!inst) return res.status(404).json({ error: "Not found" });
+        await inst.updateGroupParticipants(jid, participants, action);
+        res.json({ success: true });
+    });
+
+    app.patch('/api/groups/:instanceId/:jid/metadata', requireAuth, async (req, res) => {
+        const { instanceId, jid } = req.params;
+        const { subject, description } = req.body;
+        const inst = engineManager.getInstance(parseInt(instanceId));
+        if (!inst) return res.status(404).json({ error: "Not found" });
+        await inst.updateGroupMetadata(jid, { subject, description });
+        res.json({ success: true });
+    });
+
+    // --- PHASE 3 UTILITY ENDPOINTS ---
+    app.get('/api/messages/:instanceId/search', requireAuth, (req, res) => {
+        const { instanceId } = req.params;
+        const { query, type, jid } = req.query;
+        let sql = 'SELECT * FROM messages WHERE instance_id = ?';
+        const params: any[] = [instanceId];
+
+        if (jid) {
+            sql += ' AND chat_jid = ?';
+            params.push(normalizeJid(jid as string));
+        }
+        if (query) {
+            sql += ' AND text LIKE ?';
+            params.push(`%${query}%`);
+        }
+        if (type) {
+            sql += ' AND type = ?';
+            params.push(type);
+        }
+        sql += ' ORDER BY timestamp DESC LIMIT 100';
+
+        const results = db.prepare(sql).all(...params);
+        res.json(results);
+    });
+
+    app.post('/api/chats/:instanceId/:jid/modify', requireAuth, async (req, res) => {
+        const { instanceId, jid } = req.params;
+        const normalized = normalizeJid(jid);
+        const { action } = req.body; 
+        const inst = engineManager.getInstance(parseInt(instanceId));
+        if (!inst) return res.status(404).json({ error: "Not found" });
+        await inst.modifyChat(normalized, action);
         res.json({ success: true });
     });
 
@@ -306,23 +381,31 @@ async function bootstrap() {
     });
 
     app.get('/api/messages/:instanceId/:jid', requireAuth, (req, res) => {
-        const { instanceId, jid } = req.params;
-        const user = (req as any).haUser;
+        const { instanceId } = req.params;
+        const jid = normalizeJid(req.params.jid);
+        const user = (req as any).haUser as AuthUser;
         console.log(`API: Fetching messages for instance ${instanceId}, chat ${jid}`);
-        const instanceData = db.prepare('SELECT ha_user_id FROM instances WHERE id = ?').get(instanceId) as any;
+        const instanceData = db.prepare('SELECT ha_user_id FROM instances WHERE id = ?').get(instanceId) as Instance | undefined;
         if (!user.isAdmin && instanceData?.ha_user_id !== user.id) return res.status(403).json({ error: "Access Denied" });
 
-        const messages = db.prepare('SELECT * FROM messages WHERE instance_id = ? AND chat_jid = ? ORDER BY id ASC').all(instanceId, jid);
+        const messages = db.prepare('SELECT * FROM messages WHERE instance_id = ? AND chat_jid = ? ORDER BY timestamp ASC').all(instanceId, jid) as any[];
+        
+        // Attach reactions to each message
+        for (const msg of messages) {
+            msg.reactions = db.prepare('SELECT sender_jid, emoji FROM reactions WHERE instance_id = ? AND message_whatsapp_id = ?').all(instanceId, msg.whatsapp_id);
+        }
+
         res.json(messages);
     });
 
     app.post('/api/send_message', requireAuth, async (req, res) => {
         const { instanceId, contact, message } = req.body;
-        console.log(`API: Sending message to ${contact} via instance ${instanceId}`);
+        const jid = normalizeJid(contact);
+        console.log(`API: Sending message to ${jid} via instance ${instanceId}`);
         const instance = engineManager.getInstance(instanceId);
         if (!instance) return res.status(404).json({ error: "Instance not found" });
         try {
-            await instance.sendMessage(contact, message);
+            await instance.sendMessage(jid, message);
             res.json({ success: true });
         } catch (e: any) { res.status(500).json({ error: e.message }); }
     });

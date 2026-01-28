@@ -55,6 +55,8 @@ export function initDatabase() {
             last_message_text TEXT,
             last_message_timestamp DATETIME,
             is_fully_synced INTEGER DEFAULT 0,
+            is_archived INTEGER DEFAULT 0,
+            is_pinned INTEGER DEFAULT 0,
             PRIMARY KEY(instance_id, jid),
             FOREIGN KEY(instance_id) REFERENCES instances(id)
         );
@@ -62,19 +64,49 @@ export function initDatabase() {
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             instance_id INTEGER,
+            whatsapp_id TEXT UNIQUE,
             chat_jid TEXT,
             sender_jid TEXT,
             sender_name TEXT,
             text TEXT,
+            type TEXT DEFAULT 'text',
+            media_path TEXT,
+            latitude REAL,
+            longitude REAL,
+            vcard_data TEXT,
+            status TEXT DEFAULT 'sent',
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
             is_from_me INTEGER,
-            UNIQUE(instance_id, chat_jid, text, timestamp),
+            parent_message_id TEXT,
             FOREIGN KEY(instance_id) REFERENCES instances(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS reactions (
+            instance_id INTEGER,
+            message_whatsapp_id TEXT,
+            sender_jid TEXT,
+            emoji TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY(instance_id, message_whatsapp_id, sender_jid),
+            FOREIGN KEY(instance_id) REFERENCES instances(id),
+            FOREIGN KEY(message_whatsapp_id) REFERENCES messages(whatsapp_id)
         );
 
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS status_updates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            instance_id INTEGER,
+            sender_jid TEXT,
+            sender_name TEXT,
+            type TEXT,
+            text TEXT,
+            media_path TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(instance_id) REFERENCES instances(id)
         );
     `);
 

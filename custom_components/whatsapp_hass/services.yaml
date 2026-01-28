@@ -1,22 +1,104 @@
 send_message:
-  name: Send message
-  description: Sends a WhatsApp message to a contact.
+  name: Send Message
+  description: Sends a text message to a specific contact or group.
   fields:
-    sender:
-      name: Sender
-      description: The name of the WhatsApp account to send from (as defined during setup).
-      required: true
+    instance_id:
+      name: Instance ID
+      description: The ID of the WhatsApp instance to use.
+      default: 1
+      required: false
       selector:
-        text:
+        number:
+          min: 1
+          max: 100
     contact:
-      name: Contact
-      description: The name of the contact or group to send the message to.
+      name: Contact JID
+      description: The JID of the contact (e.g. 31612345678@s.whatsapp.net).
       required: true
       selector:
         text:
     message:
       name: Message
-      description: The message to send.
+      description: The text message to send.
       required: true
       selector:
         text:
+
+modify_chat:
+  name: Modify Chat
+  description: Perform actions like Pin, Archive, or Delete on a specific conversation.
+  fields:
+    instance_id:
+      name: Instance ID
+      description: The ID of the WhatsApp instance.
+      default: 1
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 100
+    jid:
+      name: Chat JID
+      description: The JID of the conversation.
+      required: true
+      selector:
+        text:
+    action:
+      name: Action
+      description: The action to perform.
+      required: true
+      selector:
+        select:
+          options:
+            - archive
+            - pin
+            - delete
+
+set_presence:
+  name: Set Presence
+  description: Manually set the WhatsApp account online or offline.
+  fields:
+    instance_id:
+      name: Instance ID
+      description: The ID of the WhatsApp instance.
+      default: 1
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 100
+    presence:
+      name: Presence
+      description: The desired online state.
+      required: true
+      selector:
+        select:
+          options:
+            - available
+            - unavailable
+
+create_group:
+  name: Create Group
+  description: Create a new WhatsApp group with multiple participants.
+  fields:
+    instance_id:
+      name: Instance ID
+      description: The ID of the WhatsApp instance.
+      default: 1
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 100
+    title:
+      name: Title
+      description: The name of the new group.
+      required: true
+      selector:
+        text:
+    participants:
+      name: Participants
+      description: List of JIDs to add to the group.
+      required: true
+      selector:
+        object:
