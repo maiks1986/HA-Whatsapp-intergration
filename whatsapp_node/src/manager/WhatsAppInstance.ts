@@ -5,7 +5,9 @@ import makeWASocket, {
     WASocket,
     ConnectionState,
     Browsers,
-    Contact
+    Contact,
+    downloadMediaMessage,
+    WAMessage
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode';
@@ -23,6 +25,7 @@ export class WhatsAppInstance {
     public presence: 'available' | 'unavailable' = 'available';
     private authPath: string;
     private namingWorker: NodeJS.Timeout | null = null;
+    private historyWorker: NodeJS.Timeout | null = null;
     private isReconnecting: boolean = false;
     private debugEnabled: boolean;
     private io: any;
@@ -38,18 +41,12 @@ export class WhatsAppInstance {
     }
 
     async init() {
-        if (this.sock) {
-            console.log(`TRACE [Instance ${this.id}]: init() called but socket already exists. Skipping.`);
-            return;
-        }
-
-        console.log(`TRACE [Instance ${this.id}]: Starting init(). Auth Path: ${this.authPath}`);
+        if (this.sock) return;
         
         try {
             const { state, saveCreds } = await useMultiFileAuthState(this.authPath);
             const { version } = await fetchLatestBaileysVersion();
             const logger = pino({ level: this.debugEnabled ? 'debug' : 'info' }); 
-
             const dbInstance = getDb();
 
             const upsertContact = dbInstance.prepare(`
@@ -69,9 +66,12 @@ export class WhatsAppInstance {
             `);
 
             const insertMessage = dbInstance.prepare(`
-                INSERT OR IGNORE INTO messages 
-                (instance_id, chat_jid, sender_jid, sender_name, text, is_from_me, timestamp) 
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO messages 
+                (instance_id, whatsapp_id, chat_jid, sender_jid, sender_name, text, type, media_path, status, timestamp, is_from_me, parent_message_id) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(whatsapp_id) DO UPDATE SET
+                text = excluded.text,
+                status = excluded.status
             `);
 
             this.sock = makeWASocket({
@@ -86,226 +86,143 @@ export class WhatsAppInstance {
                 logger: logger as any
             });
 
-            const getMessageText = (m: any) => {
-                const msg = m.message;
-                if (!msg) return "";
-                return msg.conversation || 
-                       msg.extendedTextMessage?.text || 
-                       msg.imageMessage?.caption || 
-                       msg.videoMessage?.caption ||
-                       msg.templateButtonReplyMessage?.selectedDisplayText ||
-                       msg.buttonsResponseMessage?.selectedDisplayText ||
-                       msg.listResponseMessage?.title ||
-                       "";
-            };
+            const normalizeJid = (jid: string) => jid?.split(':')[0] + (jid?.includes('@') ? '@' + jid.split('@')[1] : '');
 
-            const isJidValid = (jid: string) => {
-                return jid && !jid.includes('@broadcast') && jid !== 'status@broadcast';
-            };
+            const saveMessageToDb = async (m: WAMessage, instanceId: number) => {
+                const message = m.message;
+                if (!message) return;
 
-            const normalizeJid = (jid: string) => {
-                if (!jid) return jid;
-                let normalized = jid;
-                if (jid.includes(':')) {
-                    normalized = jid.replace(/:[0-9]+@/, '@');
+                const jid = normalizeJid(m.key.remoteJid!);
+                const whatsapp_id = m.key.id!;
+                const timestamp = new Date(Number(m.messageTimestamp) * 1000).toISOString();
+                const is_from_me = m.key.fromMe ? 1 : 0;
+                const sender_jid = m.key.participant ? normalizeJid(m.key.participant) : jid;
+                const sender_name = m.pushName || "Unknown";
+
+                let text = message.conversation || message.extendedTextMessage?.text || "";
+                let type: any = 'text';
+                let media_path = null;
+
+                // Handle Media
+                const mediaType = Object.keys(message)[0];
+                if (['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'].includes(mediaType)) {
+                    type = mediaType.replace('Message', '');
+                    text = (message as any)[mediaType]?.caption || "";
+                    
+                    try {
+                        const buffer = await downloadMediaMessage(m, 'buffer', {}, { logger: logger as any, reuploadRequest: this.sock!.updateMediaMessage });
+                        const fileName = `${whatsapp_id}.${type === 'audio' ? 'ogg' : type === 'image' ? 'jpg' : type === 'video' ? 'mp4' : 'bin'}`;
+                        const dir = process.env.NODE_ENV === 'development' ? './media' : '/data/media';
+                        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+                        media_path = path.join(dir, fileName);
+                        fs.writeFileSync(media_path, buffer);
+                    } catch (e) {
+                        console.error("Media Download Error:", e);
+                    }
                 }
-                return normalized;
-            };
 
-            const getChatName = (jid: string, existingName?: string | null) => {
-                const normalized = normalizeJid(jid);
-                if (existingName && existingName !== normalized && !existingName.includes('@') && existingName !== 'Unnamed Group') return existingName;
-                
-                const contact = dbInstance.prepare('SELECT name FROM contacts WHERE instance_id = ? AND jid = ?').get(this.id, normalized) as any;
-                if (contact?.name && !contact.name.includes('@')) return contact.name;
+                // Handle Edits
+                if (message.protocolMessage?.type === 14) { 
+                    const editedId = message.protocolMessage.key?.id;
+                    const newText = message.protocolMessage.editedMessage?.conversation || message.protocolMessage.editedMessage?.extendedTextMessage?.text;
+                    if (editedId && newText) {
+                        dbInstance.prepare('UPDATE messages SET text = ? WHERE whatsapp_id = ?').run(newText, editedId);
+                    }
+                    return;
+                }
 
-                if (normalized.endsWith('@g.us')) return 'Unnamed Group';
-                return normalized.split('@')[0];
+                // Handle Reactions
+                if (message.reactionMessage) {
+                    const targetId = message.reactionMessage.key?.id;
+                    const emoji = message.reactionMessage.text;
+                    if (targetId && emoji) {
+                        dbInstance.prepare('INSERT OR REPLACE INTO reactions (instance_id, message_whatsapp_id, sender_jid, emoji) VALUES (?, ?, ?, ?)')
+                            .run(instanceId, targetId, sender_jid, emoji);
+                    }
+                    return;
+                }
+
+                insertMessage.run(instanceId, whatsapp_id, jid, sender_jid, sender_name, text, type, media_path, 'sent', timestamp, is_from_me, null);
+                upsertChat.run(instanceId, jid, sender_name, 0, timestamp);
+                dbInstance.prepare('UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ?').run(text || `[${type}]`, timestamp, instanceId, jid);
             };
 
             if (this.sock) {
                 const evAny = this.sock.ev as any;
 
-                // 1. ROBUST CATCH-ALL (Must be first to capture sync)
-                const safeStringify = (obj: any) => {
-                    const cache = new Set();
-                    return JSON.stringify(obj, (key, value) => {
-                        if (typeof value === 'object' && value !== null) {
-                            if (cache.has(value)) return '[Circular]';
-                            cache.add(value);
-                        }
-                        return value;
-                    });
-                };
-
                 evAny.on('events', (events: any) => {
-                    try {
-                        const logPath = process.env.NODE_ENV === 'development' ? './raw_events.log' : '/data/raw_events.log';
-                        const logEntry = safeStringify({ timestamp: new Date().toISOString(), instanceId: this.id, events });
-                        
-                        // Disk log
-                        fs.appendFileSync(logPath, logEntry + '\n');
-
-                        // Live stream (only if payload is reasonable size < 50KB to avoid socket hang)
-                        if (logEntry.length < 50000) {
-                            this.io.emit('raw_whatsapp_event', JSON.parse(logEntry));
-                        } else {
-                            this.io.emit('raw_whatsapp_event', { 
-                                timestamp: new Date().toISOString(), 
-                                instanceId: this.id, 
-                                events: { info: "Event payload too large for live stream. Check disk logs.", types: Object.keys(events) } 
-                            });
-                        }
-                    } catch (e) {}
+                    const logEntry = JSON.stringify({ timestamp: new Date().toISOString(), instanceId: this.id, events }, (k, v) => (typeof v === 'object' && v !== null && k === 'events') ? '[Payload]' : v);
+                    this.io.emit('raw_whatsapp_event', { timestamp: new Date().toISOString(), instanceId: this.id, events });
                 });
 
-                // 2. Standard Logic Handlers
-                this.sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
-                    const { connection, lastDisconnect, qr } = update;
-                    if (qr) {
-                        this.qr = await qrcode.toDataURL(qr);
-                        this.status = 'qr_ready';
-                    }
+                this.sock.ev.on('connection.update', async (update) => {
+                    const { connection, qr } = update;
+                    if (qr) this.qr = await qrcode.toDataURL(qr);
                     if (connection === 'open') {
                         this.status = 'connected';
-                        this.qr = null;
                         dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
                         this.startNamingWorker();
-                    }
-                    if (connection === 'close') {
-                        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-                        this.status = 'disconnected';
-                        this.sock = null;
-                        dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
-                        if (statusCode === DisconnectReason.loggedOut) {
-                            await this.deleteAuth();
-                        } else if (!this.isReconnecting) {
-                            setTimeout(() => this.init(), 5000);
-                        }
+                        this.startDeepHistoryWorker();
                     }
                 });
 
                 this.sock.ev.on('creds.update', saveCreds);
 
-                this.sock.ev.on('messaging-history.set', async (payload: any) => {
-                    const { chats, contacts, messages } = payload;
-                    dbInstance.transaction(() => {
-                        if (contacts) {
-                            for (const contact of contacts) {
-                                if (!isJidValid(contact.id)) continue;
-                                const normalized = normalizeJid(contact.id);
-                                const name = contact.name || contact.notify || (contact as any).verifiedName;
-                                if (name && name !== normalized && !name.includes('@')) {
-                                    upsertContact.run(this.id, normalized, name);
-                                }
-                            }
-                        }
-                        if (chats) {
-                            for (const chat of chats) {
-                                if (!isJidValid(chat.id)) continue;
-                                const normalized = normalizeJid(chat.id);
-                                const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
-                                const isoTs = ts ? new Date(Number(ts) * 1000).toISOString() : null;
-                                upsertChat.run(this.id, normalized, getChatName(normalized, chat.name), chat.unreadCount || 0, isoTs);
-                            }
-                        }
-                        if (messages) {
-                            for (const msg of messages) {
-                                const text = getMessageText(msg);
-                                if (text && isJidValid(msg.key.remoteJid!)) {
-                                    const jid = normalizeJid(msg.key.remoteJid!);
-                                    const ts = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
-                                    upsertChat.run(this.id, jid, getChatName(jid, msg.pushName), 0, ts);
-                                    insertMessage.run(this.id, jid, normalizeJid(msg.key.participant || jid), msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
-                                    dbInstance.prepare(`UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ? AND (last_message_timestamp IS NULL OR ? >= last_message_timestamp)`).run(text, ts, this.id, jid, ts);
-                                }
-                            }
-                        }
-                    })();
-                    this.io.emit('chat_update', { instanceId: this.id });
-                });
-
-                this.sock.ev.on('messages.upsert', (m: any) => {
-                    if (m.type === 'notify') {
-                        for (const msg of m.messages) {
-                            const text = getMessageText(msg);
-                            if (text && isJidValid(msg.key.remoteJid!)) {
-                                const jid = normalizeJid(msg.key.remoteJid!);
-                                const ts = msg.messageTimestamp ? new Date(Number(msg.messageTimestamp) * 1000).toISOString() : new Date().toISOString();
-                                upsertChat.run(this.id, jid, getChatName(jid, msg.pushName), 0, ts);
-                                insertMessage.run(this.id, jid, normalizeJid(msg.key.participant || jid), msg.pushName || "Unknown", text, msg.key.fromMe ? 1 : 0, ts);
-                                dbInstance.prepare(`UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ? AND (last_message_timestamp IS NULL OR ? >= last_message_timestamp)`).run(text, ts, this.id, jid, ts);
-                                this.io.emit('new_message', { instanceId: this.id, jid, text });
-                                this.io.emit('chat_update', { instanceId: this.id });
-                            }
-                        }
+                this.sock.ev.on('messages.upsert', async (m) => {
+                    for (const msg of m.messages) {
+                        await saveMessageToDb(msg, this.id);
                     }
-                });
-
-                evAny.on('chats.upsert', (chats: any[]) => {
-                    dbInstance.transaction(() => {
-                        for (const chat of chats) {
-                            if (!isJidValid(chat.id)) continue;
-                            const jid = normalizeJid(chat.id);
-                            const ts = chat.conversationTimestamp || chat.lastMessageRecvTimestamp;
-                            const isoTs = ts ? new Date(Number(ts) * 1000).toISOString() : null;
-                            upsertChat.run(this.id, jid, getChatName(jid, chat.name), chat.unread_count || 0, isoTs);
-                        }
-                    })();
                     this.io.emit('chat_update', { instanceId: this.id });
                 });
 
-                evAny.on('contacts.upsert', (contacts: any[]) => {
-                    dbInstance.transaction(() => {
-                        for (const contact of contacts) {
-                            if (isJidValid(contact.id)) {
-                                const jid = normalizeJid(contact.id);
-                                const name = contact.name || contact.notify;
-                                if (name) upsertContact.run(this.id, jid, name);
-                            }
-                        }
-                    })();
+                this.sock.ev.on('message-receipt.update', (updates) => {
+                    for (const { key, receipt } of updates) {
+                        const status = receipt.readTimestamp ? 'read' : receipt.receiptTimestamp ? 'delivered' : 'sent';
+                        dbInstance.prepare('UPDATE messages SET status = ? WHERE whatsapp_id = ?').run(status, key.id);
+                    }
                     this.io.emit('chat_update', { instanceId: this.id });
                 });
             }
         } catch (err) {
-            console.error(`TRACE [Instance ${this.id}]: FATAL ERROR during init:`, err);
+            console.error(`FATAL ERROR during init:`, err);
         }
     }
 
     private startNamingWorker() {
         if (this.namingWorker) return;
-        console.log(`TRACE [Instance ${this.id}]: Starting background naming worker...`);
         this.namingWorker = setInterval(async () => {
             const db = getDb();
-            const unnamed = db.prepare(`
-                SELECT jid, name FROM chats 
-                WHERE instance_id = ? AND (name LIKE '%@s.whatsapp.net' OR name = 'Unnamed Group' OR name IS NULL OR name = '')
-            `).all(this.id) as any[];
-
+            const unnamed = db.prepare(`SELECT jid, name FROM chats WHERE instance_id = ? AND (name LIKE '%@s.whatsapp.net' OR name = 'Unnamed Group' OR name IS NULL OR name = '')`).all(this.id) as any[];
             for (const chat of unnamed) {
                 if (chat.jid.endsWith('@g.us')) {
                     try {
                         const metadata = await this.sock?.groupMetadata(chat.jid);
-                        if (metadata?.subject) {
-                            db.prepare('UPDATE chats SET name = ? WHERE instance_id = ? AND jid = ?').run(metadata.subject, this.id, chat.jid);
-                        }
+                        if (metadata?.subject) db.prepare('UPDATE chats SET name = ? WHERE instance_id = ? AND jid = ?').run(metadata.subject, this.id, chat.jid);
                     } catch (e) {}
-                } else {
-                    const contact = db.prepare('SELECT name FROM contacts WHERE instance_id = ? AND jid = ?').get(this.id, chat.jid) as any;
-                    if (contact?.name) {
-                        db.prepare('UPDATE chats SET name = ? WHERE instance_id = ? AND jid = ?').run(contact.name, this.id, chat.jid);
-                    }
                 }
             }
-        }, 60000); 
+        }, 60000);
+    }
+
+    private startDeepHistoryWorker() {
+        if (this.historyWorker) return;
+        this.historyWorker = setInterval(async () => {
+            if (!this.sock || this.status !== 'connected') return;
+            const db = getDb();
+            const chat = db.prepare(`SELECT jid FROM chats WHERE instance_id = ? AND is_fully_synced = 0 LIMIT 1`).get(this.id) as any;
+            if (!chat) { clearInterval(this.historyWorker!); return; }
+            try {
+                // Fetch 50 messages
+                const result = await this.sock.fetchMessageHistory(50, { id: 'dummy', fromMe: false }, 0);
+                if (!result) db.prepare('UPDATE chats SET is_fully_synced = 1 WHERE instance_id = ? AND jid = ?').run(this.id, chat.jid);
+            } catch (e) {}
+        }, 30000);
     }
 
     async setPresence(presence: 'available' | 'unavailable') {
         this.presence = presence;
         if (this.sock) {
-            if (presence === 'available') await this.sock.sendPresenceUpdate('available');
-            else await this.sock.sendPresenceUpdate('unavailable');
+            await this.sock.sendPresenceUpdate(presence);
         }
     }
 
@@ -323,21 +240,18 @@ export class WhatsAppInstance {
     async sendMessage(jid: string, text: string) {
         if (!this.sock || this.status !== 'connected') throw new Error("Instance not connected");
         await this.sock.sendMessage(jid, { text });
-        const dbInstance = getDb();
-        dbInstance.prepare(`INSERT OR IGNORE INTO messages (instance_id, chat_jid, sender_jid, sender_name, text, is_from_me) VALUES (?, ?, ?, ?, ?, ?)`) 
-            .run(this.id, jid, 'me', 'Me', text, 1);
-        dbInstance.prepare(`UPDATE chats SET last_message_text = ?, last_message_timestamp = CURRENT_TIMESTAMP WHERE instance_id = ? AND jid = ?`) 
-            .run(text, this.id, jid);
     }
 
     async deleteAuth() {
         if (this.namingWorker) clearInterval(this.namingWorker);
+        if (this.historyWorker) clearInterval(this.historyWorker);
         if (this.sock) { try { await this.sock.logout(); } catch (e) {} this.sock = null; }
         if (fs.existsSync(this.authPath)) fs.rmSync(this.authPath, { recursive: true, force: true });
     }
 
     async close() {
         if (this.namingWorker) clearInterval(this.namingWorker);
+        if (this.historyWorker) clearInterval(this.historyWorker);
         if (this.sock) { this.sock.end(undefined); this.sock = null; }
     }
 }

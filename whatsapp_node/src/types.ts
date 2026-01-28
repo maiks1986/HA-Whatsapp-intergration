@@ -26,12 +26,18 @@ export interface Chat {
 export interface Message {
     id: number;
     instance_id: number;
+    whatsapp_id: string;
     chat_jid: string;
     sender_jid: string;
     sender_name: string;
     text: string;
+    type: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'location' | 'poll' | 'reaction';
+    media_path?: string | null;
+    status: 'sent' | 'delivered' | 'read' | 'failed' | 'deleted';
     timestamp: string;
     is_from_me: number;
+    parent_message_id?: string | null;
+    reactions?: Array<{ sender_jid: string, emoji: string }>;
 }
 
 export interface AuthUser {
