@@ -14,6 +14,7 @@ import makeWASocket, {
 import { Boom } from '@hapi/boom';
 import qrcode from 'qrcode';
 import { getDb } from '../db/database';
+import { normalizeJid, isJidValid } from '../utils';
 import path from 'path';
 import fs from 'fs';
 import pino from 'pino';
@@ -64,7 +65,16 @@ export class WhatsAppInstance {
                 logger: this.logger
             });
 
-            const normalizeJid = (jid: string) => jid?.split(':')[0] + (jid?.includes('@') ? '@' + jid.split('@')[1] : '');
+            const getChatName = (jid: string, existingName?: string | null) => {
+                const normalized = normalizeJid(jid);
+                if (existingName && existingName !== normalized && !existingName.includes('@') && existingName !== 'Unnamed Group') return existingName;
+                
+                const contact = dbInstance.prepare('SELECT name FROM contacts WHERE instance_id = ? AND jid = ?').get(this.id, normalized) as any;
+                if (contact?.name && !contact.name.includes('@')) return contact.name;
+
+                if (normalized.endsWith('@g.us')) return 'Unnamed Group';
+                return normalized.split('@')[0];
+            };
 
             const saveMessageToDb = async (m: WAMessage, instanceId: number) => {
                 const message = m.message;
@@ -89,7 +99,6 @@ export class WhatsAppInstance {
                 let longitude = null;
                 let vcard_data = null;
 
-                // 1. Handle Media
                 const mediaType = Object.keys(message)[0];
                 if (['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'].includes(mediaType)) {
                     type = mediaType.replace('Message', '');
@@ -104,7 +113,6 @@ export class WhatsAppInstance {
                     } catch (e) {}
                 }
 
-                // 2. Handle Location
                 if (message.locationMessage || message.liveLocationMessage) {
                     type = 'location';
                     const loc = message.locationMessage || message.liveLocationMessage;
@@ -113,14 +121,12 @@ export class WhatsAppInstance {
                     text = `Location: ${latitude}, ${longitude}`;
                 }
 
-                // 3. Handle vCards
                 if (message.contactMessage || message.contactsArrayMessage) {
                     type = 'vcard';
                     vcard_data = message.contactMessage ? message.contactMessage.vcard : JSON.stringify(message.contactsArrayMessage?.contacts?.map(c => c.vcard) || []);
                     text = "Shared Contact Card";
                 }
 
-                // 4. Handle Edits
                 if (message.protocolMessage?.type === 14) {
                     const editedId = message.protocolMessage.key?.id;
                     const newText = message.protocolMessage.editedMessage?.conversation || message.protocolMessage.editedMessage?.extendedTextMessage?.text;
@@ -128,7 +134,6 @@ export class WhatsAppInstance {
                     return;
                 }
 
-                // 5. Handle Reactions
                 if (message.reactionMessage) {
                     const targetId = message.reactionMessage.key?.id;
                     const emoji = message.reactionMessage.text;
@@ -152,7 +157,7 @@ export class WhatsAppInstance {
                     ON CONFLICT(instance_id, jid) DO UPDATE SET
                     name = CASE WHEN (chats.name IS NULL OR chats.name = '' OR chats.name LIKE '%@s.whatsapp.net' OR chats.name = 'Unnamed Group') AND excluded.name IS NOT NULL AND excluded.name != '' THEN excluded.name ELSE chats.name END,
                     last_message_timestamp = CASE WHEN excluded.last_message_timestamp IS NOT NULL THEN excluded.last_message_timestamp ELSE chats.last_message_timestamp END
-                `).run(instanceId, jid, sender_name, 0, timestamp);
+                `).run(instanceId, jid, getChatName(jid, sender_name), 0, timestamp);
 
                 dbInstance.prepare('UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ?').run(text || `[${type}]`, timestamp, instanceId, jid);
             };
@@ -191,7 +196,7 @@ export class WhatsAppInstance {
                 });
 
                 this.sock.ev.on('presence.update', (update) => {
-                    this.io.emit('presence_update', { instanceId: this.id, jid: update.id, presence: update.presences });
+                    this.io.emit('presence_update', { instanceId: this.id, jid: normalizeJid(update.id), presence: update.presences });
                 });
             }
         } catch (err) {
@@ -201,7 +206,7 @@ export class WhatsAppInstance {
 
     private async handleStatusUpdate(m: WAMessage, instanceId: number) {
         const message = m.message;
-        const sender_jid = m.key.participant || m.key.remoteJid!;
+        const sender_jid = normalizeJid(m.key.participant || m.key.remoteJid!);
         const sender_name = m.pushName || "Unknown";
         const timestamp = new Date(Number(m.messageTimestamp) * 1000).toISOString();
         let text = message?.conversation || message?.extendedTextMessage?.text || "";
@@ -225,38 +230,38 @@ export class WhatsAppInstance {
 
     async createGroup(title: string, participants: string[]) {
         if (!this.sock) throw new Error("Socket not initialized");
-        return await this.sock.groupCreate(title, participants);
+        return await this.sock.groupCreate(title, participants.map(p => normalizeJid(p)));
     }
 
     async updateGroupParticipants(jid: string, participants: string[], action: 'add' | 'remove' | 'promote' | 'demote') {
         if (!this.sock) throw new Error("Socket not initialized");
-        return await this.sock.groupParticipantsUpdate(jid, participants, action);
+        return await this.sock.groupParticipantsUpdate(normalizeJid(jid), participants.map(p => normalizeJid(p)), action);
     }
 
     async updateGroupMetadata(jid: string, update: { subject?: string, description?: string }) {
         if (!this.sock) throw new Error("Socket not initialized");
-        if (update.subject) await this.sock.groupUpdateSubject(jid, update.subject);
-        if (update.description) await this.sock.groupUpdateDescription(jid, update.description);
+        const normalized = normalizeJid(jid);
+        if (update.subject) await this.sock.groupUpdateSubject(normalized, update.subject);
+        if (update.description) await this.sock.groupUpdateDescription(normalized, update.description);
     }
 
     async modifyChat(jid: string, action: 'archive' | 'pin' | 'mute' | 'delete') {
         if (!this.sock) throw new Error("Socket not initialized");
         const db = getDb();
-        
-        // Find last message for metadata
-        const lastMsg = db.prepare('SELECT whatsapp_id, timestamp FROM messages WHERE instance_id = ? AND chat_jid = ? ORDER BY timestamp DESC LIMIT 1').get(this.id, jid) as any;
-        const lastMessages = lastMsg ? [{ key: { id: lastMsg.whatsapp_id, remoteJid: jid, fromMe: true }, messageTimestamp: Math.floor(new Date(lastMsg.timestamp).getTime()/1000) }] : [];
+        const normalized = normalizeJid(jid);
+        const lastMsg = db.prepare('SELECT whatsapp_id, timestamp FROM messages WHERE instance_id = ? AND chat_jid = ? ORDER BY timestamp DESC LIMIT 1').get(this.id, normalized) as any;
+        const lastMessages = lastMsg ? [{ key: { id: lastMsg.whatsapp_id, remoteJid: normalized, fromMe: true }, messageTimestamp: Math.floor(new Date(lastMsg.timestamp).getTime()/1000) }] : [];
 
         if (action === 'archive') {
-            await this.sock.chatModify({ archive: true, lastMessages: lastMessages as any }, jid);
-            db.prepare('UPDATE chats SET is_archived = 1 WHERE instance_id = ? AND jid = ?').run(this.id, jid);
+            await this.sock.chatModify({ archive: true, lastMessages: lastMessages as any }, normalized);
+            db.prepare('UPDATE chats SET is_archived = 1 WHERE instance_id = ? AND jid = ?').run(this.id, normalized);
         } else if (action === 'pin') {
-            await this.sock.chatModify({ pin: true }, jid);
-            db.prepare('UPDATE chats SET is_pinned = 1 WHERE instance_id = ? AND jid = ?').run(this.id, jid);
+            await this.sock.chatModify({ pin: true, lastMessages: lastMessages as any }, normalized);
+            db.prepare('UPDATE chats SET is_pinned = 1 WHERE instance_id = ? AND jid = ?').run(this.id, normalized);
         } else if (action === 'delete') {
-            await this.sock.chatModify({ delete: true, lastMessages: lastMessages as any }, jid);
-            db.prepare('DELETE FROM messages WHERE instance_id = ? AND chat_jid = ?').run(this.id, jid);
-            db.prepare('DELETE FROM chats WHERE instance_id = ? AND jid = ?').run(this.id, jid);
+            await this.sock.chatModify({ delete: true, lastMessages: lastMessages as any }, normalized);
+            db.prepare('DELETE FROM messages WHERE instance_id = ? AND chat_jid = ?').run(this.id, normalized);
+            db.prepare('DELETE FROM chats WHERE instance_id = ? AND jid = ?').run(this.id, normalized);
         }
         this.io.emit('chat_update', { instanceId: this.id });
     }
@@ -267,10 +272,11 @@ export class WhatsAppInstance {
             const db = getDb();
             const unnamed = db.prepare(`SELECT jid, name FROM chats WHERE instance_id = ? AND (name LIKE '%@s.whatsapp.net' OR name = 'Unnamed Group' OR name IS NULL OR name = '')`).all(this.id) as any[];
             for (const chat of unnamed) {
-                if (chat.jid.endsWith('@g.us')) {
+                const normalized = normalizeJid(chat.jid);
+                if (normalized.endsWith('@g.us')) {
                     try {
-                        const metadata = await this.sock?.groupMetadata(chat.jid);
-                        if (metadata?.subject) db.prepare('UPDATE chats SET name = ? WHERE instance_id = ? AND jid = ?').run(metadata.subject, this.id, chat.jid);
+                        const metadata = await this.sock?.groupMetadata(normalized);
+                        if (metadata?.subject) db.prepare('UPDATE chats SET name = ? WHERE instance_id = ? AND jid = ?').run(metadata.subject, this.id, normalized);
                     } catch (e) {}
                 }
             }
@@ -279,15 +285,28 @@ export class WhatsAppInstance {
 
     private startDeepHistoryWorker() {
         if (this.historyWorker) return;
+        console.log(`TRACE [Instance ${this.id}]: Starting Deep History worker...`);
         this.historyWorker = setInterval(async () => {
             if (!this.sock || this.status !== 'connected') return;
             const db = getDb();
             const chat = db.prepare(`SELECT jid FROM chats WHERE instance_id = ? AND is_fully_synced = 0 LIMIT 1`).get(this.id) as any;
-            if (!chat) { clearInterval(this.historyWorker!); return; }
+            if (!chat) { clearInterval(this.historyWorker!); this.historyWorker = null; return; }
+            
             try {
-                const result = await this.sock.fetchMessageHistory(50, { id: 'dummy', fromMe: false }, 0);
-                if (!result) db.prepare('UPDATE chats SET is_fully_synced = 1 WHERE instance_id = ? AND jid = ?').run(this.id, chat.jid);
-            } catch (e) {}
+                const oldest = db.prepare('SELECT whatsapp_id, timestamp FROM messages WHERE instance_id = ? AND chat_jid = ? ORDER BY timestamp ASC LIMIT 1').get(this.id, chat.jid) as any;
+                
+                // Provide a full key object or null casted to any
+                const oldestKey = oldest ? { id: oldest.whatsapp_id, remoteJid: chat.jid, fromMe: false } : { id: '', remoteJid: chat.jid, fromMe: false };
+                const oldestTs = oldest ? Math.floor(new Date(oldest.timestamp).getTime()/1000) : 0;
+
+                const result = await this.sock.fetchMessageHistory(50, oldestKey, oldestTs);
+                
+                if (!result || result === '') {
+                    db.prepare('UPDATE chats SET is_fully_synced = 1 WHERE instance_id = ? AND jid = ?').run(this.id, chat.jid);
+                }
+            } catch (e) {
+                console.error(`TRACE [Instance ${this.id}]: Deep History Error`, e);
+            }
         }, 30000);
     }
 
@@ -306,7 +325,7 @@ export class WhatsAppInstance {
 
     async sendMessage(jid: string, text: string) {
         if (!this.sock || this.status !== 'connected') throw new Error("Instance not connected");
-        await this.sock.sendMessage(jid, { text });
+        await this.sock.sendMessage(normalizeJid(jid), { text });
     }
 
     async deleteAuth() {

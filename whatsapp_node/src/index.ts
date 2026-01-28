@@ -10,6 +10,7 @@ import { initDatabase, getDb } from './db/database';
 import { engineManager } from './manager/EngineManager';
 import { aiService } from './services/AiService';
 import { AddonConfig, AuthUser, Instance, Chat, Message } from './types';
+import { normalizeJid } from './utils';
 
 process.on('uncaughtException', (err) => {
     console.error('CRITICAL: Uncaught Exception:', err);
@@ -373,7 +374,8 @@ async function bootstrap() {
     });
 
     app.get('/api/messages/:instanceId/:jid', requireAuth, (req, res) => {
-        const { instanceId, jid } = req.params;
+        const { instanceId } = req.params;
+        const jid = normalizeJid(req.params.jid);
         const user = (req as any).haUser as AuthUser;
         console.log(`API: Fetching messages for instance ${instanceId}, chat ${jid}`);
         const instanceData = db.prepare('SELECT ha_user_id FROM instances WHERE id = ?').get(instanceId) as Instance | undefined;
@@ -391,11 +393,12 @@ async function bootstrap() {
 
     app.post('/api/send_message', requireAuth, async (req, res) => {
         const { instanceId, contact, message } = req.body;
-        console.log(`API: Sending message to ${contact} via instance ${instanceId}`);
+        const jid = normalizeJid(contact);
+        console.log(`API: Sending message to ${jid} via instance ${instanceId}`);
         const instance = engineManager.getInstance(instanceId);
         if (!instance) return res.status(404).json({ error: "Instance not found" });
         try {
-            await instance.sendMessage(contact, message);
+            await instance.sendMessage(jid, message);
             res.json({ success: true });
         } catch (e: any) { res.status(500).json({ error: e.message }); }
     });
