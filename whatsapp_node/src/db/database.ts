@@ -91,6 +91,18 @@ export function initDatabase() {
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS status_updates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            instance_id INTEGER,
+            sender_jid TEXT,
+            sender_name TEXT,
+            type TEXT,
+            text TEXT,
+            media_path TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(instance_id) REFERENCES instances(id)
+        );
     `);
 
     console.log('Database initialized successfully at', DB_PATH);

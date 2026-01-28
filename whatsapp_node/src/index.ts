@@ -246,6 +246,40 @@ async function bootstrap() {
         res.json({ success: true });
     });
 
+    // --- PHASE 2 SOCIAL ENDPOINTS ---
+    app.get('/api/status/:instanceId', requireAuth, (req, res) => {
+        const { instanceId } = req.params;
+        const updates = db.prepare('SELECT * FROM status_updates WHERE instance_id = ? ORDER BY timestamp DESC LIMIT 100').all(instanceId);
+        res.json(updates);
+    });
+
+    app.post('/api/groups/:instanceId', requireAuth, async (req, res) => {
+        const { instanceId } = req.params;
+        const { title, participants } = req.body;
+        const inst = engineManager.getInstance(parseInt(instanceId));
+        if (!inst) return res.status(404).json({ error: "Not found" });
+        const group = await inst.createGroup(title, participants);
+        res.json(group);
+    });
+
+    app.patch('/api/groups/:instanceId/:jid/participants', requireAuth, async (req, res) => {
+        const { instanceId, jid } = req.params;
+        const { action, participants } = req.body;
+        const inst = engineManager.getInstance(parseInt(instanceId));
+        if (!inst) return res.status(404).json({ error: "Not found" });
+        await inst.updateGroupParticipants(jid, participants, action);
+        res.json({ success: true });
+    });
+
+    app.patch('/api/groups/:instanceId/:jid/metadata', requireAuth, async (req, res) => {
+        const { instanceId, jid } = req.params;
+        const { subject, description } = req.body;
+        const inst = engineManager.getInstance(parseInt(instanceId));
+        if (!inst) return res.status(404).json({ error: "Not found" });
+        await inst.updateGroupMetadata(jid, { subject, description });
+        res.json({ success: true });
+    });
+
     app.get('/api/debug/stats', requireAuth, (req, res) => {
         const stats = {
             users: db.prepare('SELECT COUNT(*) as count FROM users').get(),
