@@ -17,7 +17,7 @@ export class WorkerManager {
 
     stopAll() {
         if (this.namingWorker) clearInterval(this.namingWorker);
-        if (this.historyWorker) clearInterval(this.historyWorker);
+        if (this.historyWorker) clearTimeout(this.historyWorker);
         if (this.nudgeTimer) clearInterval(this.nudgeTimer);
     }
 
@@ -40,23 +40,50 @@ export class WorkerManager {
 
     private startDeepHistoryWorker() {
         if (this.historyWorker) return;
-        this.historyWorker = setInterval(async () => {
-            if (this.status() !== 'connected') return;
+        
+        const runCycle = async () => {
+            if (this.status() !== 'connected') {
+                this.historyWorker = setTimeout(runCycle, 10000);
+                return;
+            }
+
             const db = getDb();
-            const chat = db.prepare(`SELECT jid FROM chats WHERE instance_id = ? AND is_fully_synced = 0 LIMIT 1`).get(this.instanceId) as any;
-            if (!chat) { clearInterval(this.historyWorker!); this.historyWorker = null; return; }
+            // Priority: 1. Pinned, 2. Unread, 3. Most Recent
+            const chat = db.prepare(`
+                SELECT jid FROM chats 
+                WHERE instance_id = ? AND is_fully_synced = 0 
+                ORDER BY is_pinned DESC, unread_count DESC, last_message_timestamp DESC 
+                LIMIT 1
+            `).get(this.instanceId) as any;
+
+            if (!chat) {
+                this.historyWorker = null;
+                return;
+            }
             
+            let nextDelay = 2000; // 2s default delay between chunks if successful
+
             try {
                 const oldest = db.prepare('SELECT whatsapp_id, timestamp, is_from_me FROM messages WHERE instance_id = ? AND chat_jid = ? ORDER BY timestamp ASC LIMIT 1').get(this.instanceId, chat.jid) as any;
                 const oldestKey = oldest ? { id: oldest.whatsapp_id, remoteJid: chat.jid, fromMe: !!oldest.is_from_me } : undefined;
                 const oldestTs = oldest ? Math.floor(new Date(oldest.timestamp).getTime()/1000) : 0;
 
                 const result = await this.sock.fetchMessageHistory(100, oldestKey as any, oldestTs);
-                if (!result || result === '') {
+                
+                // If no more history for this chat, mark as fully synced
+                if (!result || result === 0 || result === '') {
                     db.prepare('UPDATE chats SET is_fully_synced = 1 WHERE instance_id = ? AND jid = ?').run(this.instanceId, chat.jid);
+                    nextDelay = 500; // Fast-track to next chat
                 }
-            } catch (e) {}
-        }, 15000);
+            } catch (e) {
+                console.error(`[Sync Worker ${this.instanceId}]: Timeout or Error, backing off...`, e);
+                nextDelay = 30000; // 30s backoff on error
+            }
+
+            this.historyWorker = setTimeout(runCycle, nextDelay);
+        };
+
+        runCycle();
     }
 
     private startAutoNudgeWorker() {
