@@ -1,10 +1,9 @@
 {
-  "timestamp": "2026-01-29T12:15:00.000Z",
-  "description": "Bumped version to 1.9.1.0005. Frontend Fix: Fixed TypeScript error in useAuth.ts where 'token' was missing from 'AuthStatusResponse' interface.",
+  "timestamp": "2026-01-29T21:45:00.000Z",
+  "description": "Bumped version to 1.9.1.0006. Fixed cross-platform build command in package.json and verified frontend types.",
   "modules_affected": [
-    "frontend/src/types.ts",
-    "config.yaml",
-    "package.json",
-    "last_fixes.json"
+    "whatsapp_node/package.json",
+    "whatsapp_node/config.yaml",
+    "whatsapp_node/src/last_fixes.json"
   ]
 }
