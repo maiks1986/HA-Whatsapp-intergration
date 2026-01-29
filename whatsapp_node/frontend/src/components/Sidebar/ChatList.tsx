@@ -79,8 +79,11 @@ export const ChatList: React.FC<ChatListProps> = ({
             </div>
             <div className="flex-1 overflow-hidden">
               <div className="flex justify-between items-start mb-0.5">
-                <span className="font-bold text-slate-800 truncate">{chat.name}</span>
-                <span className="text-[9px] font-black text-slate-400 uppercase">{chat.last_message_timestamp ? new Date(chat.last_message_timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</span>
+                <div className="flex flex-col overflow-hidden">
+                    <span className="font-bold text-slate-800 truncate">{chat.name}</span>
+                    {chat.name !== chat.jid.split('@')[0] && <span className="text-[10px] text-slate-400 font-mono truncate">{chat.jid.split('@')[0]}</span>}
+                </div>
+                <span className="text-[9px] font-black text-slate-400 uppercase shrink-0 ml-2">{chat.last_message_timestamp ? new Date(chat.last_message_timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</span>
               </div>
               <div className="text-xs text-slate-500 truncate italic">
                 {presenceMap[chat.jid] ? (

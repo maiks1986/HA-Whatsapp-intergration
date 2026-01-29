@@ -1,8 +1,9 @@
 {
-  "timestamp": "2026-01-29T11:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0002. Fixed SQL error in handleHistorySet (changed double quotes to single quotes for string literals).",
+  "timestamp": "2026-01-29T11:15:00.000Z",
+  "description": "Bumped version to 1.9.1.0003. UI Improvements: Added sender name to incoming messages, added message action toolbar (Reply, Star, Forward, Delete), and improved sidebar to show phone number below contact name.",
   "modules_affected": [
-    "MessageManager.ts",
+    "MessageBubble.tsx",
+    "ChatList.tsx",
     "config.yaml",
     "package.json"
   ]

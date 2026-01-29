@@ -4,7 +4,11 @@ import {
   Check, 
   CheckCheck, 
   File, 
-  MapPin 
+  MapPin,
+  Reply,
+  Star,
+  Trash2,
+  Forward
 } from 'lucide-react';
 import { Message } from '../types';
 
@@ -16,10 +20,25 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ m }) => {
   const isMe = m.is_from_me === 1;
   const time = new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const mediaUrl = m.media_path ? `/media/${m.media_path.split(/[\/]/).pop()}` : null;
+  const isGroup = m.chat_jid.endsWith('@g.us');
 
   return (
-    <div className={`flex flex-col mb-2 ${isMe ? 'items-end' : 'items-start'}`}>
+    <div className={`flex flex-col mb-2 ${isMe ? 'items-end' : 'items-start'} group/row`}>
+      {!isMe && isGroup && (
+        <span className="text-[10px] font-bold text-teal-600 ml-3 mb-0.5 px-1">{m.sender_name !== "Unknown" ? m.sender_name : m.sender_jid.split('@')[0]}</span>
+      )}
+      
       <div className={`max-w-[85%] rounded-2xl p-2 px-3 shadow-sm relative group ${isMe ? 'bg-teal-600 text-white rounded-tr-none' : 'bg-white text-slate-800 rounded-tl-none'}`}>
+        
+        {/* Action Toolbar */}
+        <div className={`absolute -top-8 ${isMe ? 'right-0' : 'left-0'} hidden group-hover/row:flex bg-white text-slate-600 shadow-xl border border-slate-100 rounded-xl p-1 gap-1 z-50 animate-in fade-in slide-in-from-bottom-2 duration-200`}>
+            <button className="p-1.5 hover:bg-slate-100 rounded-lg hover:text-teal-600 transition-colors" title="Reply"><Reply size={14} /></button>
+            <button className="p-1.5 hover:bg-slate-100 rounded-lg hover:text-yellow-500 transition-colors" title="Star"><Star size={14} /></button>
+            <button className="p-1.5 hover:bg-slate-100 rounded-lg hover:text-blue-500 transition-colors" title="Forward"><Forward size={14} /></button>
+            <div className="w-px bg-slate-200 my-1"></div>
+            <button className="p-1.5 hover:bg-red-50 rounded-lg text-red-400 hover:text-red-600 transition-colors" title="Delete"><Trash2 size={14} /></button>
+        </div>
+
         {m.type === 'image' && mediaUrl && <div className="mb-1 rounded-lg overflow-hidden border border-black/5"><img src={mediaUrl} className="max-w-full max-h-64 object-cover" alt="WA Media" /></div>}
         {m.type === 'video' && mediaUrl && <div className="mb-1 rounded-lg overflow-hidden border border-black/5 bg-black"><video src={mediaUrl} controls className="max-w-full max-h-64" /></div>}
         {m.type === 'audio' && mediaUrl && <div className="mb-1 py-1"><audio src={mediaUrl} controls className={`max-w-full scale-90 -ml-4 ${isMe ? 'invert brightness-200' : ''}`} /></div>}
