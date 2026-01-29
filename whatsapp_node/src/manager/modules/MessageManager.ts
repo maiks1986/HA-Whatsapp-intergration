@@ -32,7 +32,7 @@ export class MessageManager {
                     if (chat.id.includes('@broadcast')) continue;
                     const normalized = normalizeJid(chat.id);
                     const name = chat.name || this.resolveNameFromContacts(normalized);
-                    db.prepare('INSERT INTO chats (instance_id, jid, name, unread_count) VALUES (?, ?, ?, ?) ON CONFLICT(instance_id, jid) DO UPDATE SET name = CASE WHEN excluded.name IS NOT NULL AND excluded.name != "" THEN excluded.name ELSE chats.name END').run(this.instanceId, normalized, name, chat.unreadCount || 0);
+                    db.prepare('INSERT INTO chats (instance_id, jid, name, unread_count) VALUES (?, ?, ?, ?) ON CONFLICT(instance_id, jid) DO UPDATE SET name = CASE WHEN excluded.name IS NOT NULL AND excluded.name != \'\' THEN excluded.name ELSE chats.name END').run(this.instanceId, normalized, name, chat.unreadCount || 0);
                 }
             }
         })();

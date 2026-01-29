@@ -1,7 +1,8 @@
 {
-  "timestamp": "2026-01-29T10:45:00.000Z",
-  "description": "Bumped version to 1.9.1.0001 to force Addon update. Includes all previous QR and database fixes.",
+  "timestamp": "2026-01-29T11:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0002. Fixed SQL error in handleHistorySet (changed double quotes to single quotes for string literals).",
   "modules_affected": [
+    "MessageManager.ts",
     "config.yaml",
     "package.json"
   ]
