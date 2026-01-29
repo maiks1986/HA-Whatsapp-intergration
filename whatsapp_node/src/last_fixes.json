@@ -1,13 +1,10 @@
 {
-  "timestamp": "2026-01-29T11:45:00.000Z",
-  "description": "Bumped version to 1.9.1.0004. Backend Fix: Filtered out empty 'ghost' messages. Auth: Implemented persistent sessions via SQLite to keep users logged in across restarts.",
+  "timestamp": "2026-01-29T12:15:00.000Z",
+  "description": "Bumped version to 1.9.1.0005. Frontend Fix: Fixed TypeScript error in useAuth.ts where 'token' was missing from 'AuthStatusResponse' interface.",
   "modules_affected": [
-    "MessageManager.ts",
-    "types.ts",
-    "authMiddleware.ts",
-    "auth.ts",
-    "database.ts",
+    "frontend/src/types.ts",
     "config.yaml",
-    "package.json"
+    "package.json",
+    "last_fixes.json"
   ]
 }

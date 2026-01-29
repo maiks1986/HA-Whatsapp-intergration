@@ -61,6 +61,7 @@ export interface AuthStatusResponse {
     source: 'ingress' | 'direct' | null;
     isAdmin: boolean;
     needsPassword: boolean;
+    token?: string;
 }
 
 export interface LoginResponse {
