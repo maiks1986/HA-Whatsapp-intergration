@@ -25,6 +25,12 @@ export const useAuth = () => {
     try {
       const res = await api.getStatus();
       if (res.data.authenticated) {
+        // If the backend auto-generated a session for Ingress, save it!
+        if (res.data.token) {
+             setCookie('direct_token', res.data.token);
+             localStorage.setItem('direct_token', res.data.token);
+             updateAxiosAuth(res.data.token);
+        }
         setAuthState('authenticated');
       } else if (retries > 0) {
         setTimeout(() => checkAuth(retries - 1), 2000);

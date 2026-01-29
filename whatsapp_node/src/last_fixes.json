@@ -1,9 +1,12 @@
 {
-  "timestamp": "2026-01-29T11:15:00.000Z",
-  "description": "Bumped version to 1.9.1.0003. UI Improvements: Added sender name to incoming messages, added message action toolbar (Reply, Star, Forward, Delete), and improved sidebar to show phone number below contact name.",
+  "timestamp": "2026-01-29T11:45:00.000Z",
+  "description": "Bumped version to 1.9.1.0004. Backend Fix: Filtered out empty 'ghost' messages. Auth: Implemented persistent sessions via SQLite to keep users logged in across restarts.",
   "modules_affected": [
-    "MessageBubble.tsx",
-    "ChatList.tsx",
+    "MessageManager.ts",
+    "types.ts",
+    "authMiddleware.ts",
+    "auth.ts",
+    "database.ts",
     "config.yaml",
     "package.json"
   ]

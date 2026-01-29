@@ -103,6 +103,15 @@ export function initDatabase() {
         )
     `).run();
 
+    db.prepare(`
+        CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            user_id TEXT,
+            is_admin INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `).run();
+
     // 2. MIGRATIONS (Ensure columns exist for legacy databases)
     const tables = ['chats', 'messages', 'instances'];
     
