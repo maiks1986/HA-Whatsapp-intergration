@@ -130,6 +130,7 @@ export function initDatabase() {
     ensureColumn('messages', 'longitude', 'REAL');
     ensureColumn('messages', 'vcard_data', 'TEXT');
     ensureColumn('messages', 'parent_message_id', 'TEXT');
+    ensureColumn('messages', 'status', "TEXT DEFAULT 'sent'");
 
     // Instance Migrations
     ensureColumn('instances', 'presence', "TEXT DEFAULT 'available'");

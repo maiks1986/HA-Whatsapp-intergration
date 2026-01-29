@@ -41,6 +41,9 @@ export const instancesRouter = () => {
             await engineManager.stopInstance(instanceId);
         }
 
+        db.prepare('DELETE FROM contacts WHERE instance_id = ?').run(instanceId);
+        db.prepare('DELETE FROM status_updates WHERE instance_id = ?').run(instanceId);
+        db.prepare('DELETE FROM reactions WHERE instance_id = ?').run(instanceId);
         db.prepare('DELETE FROM messages WHERE instance_id = ?').run(instanceId);
         db.prepare('DELETE FROM chats WHERE instance_id = ?').run(instanceId);
         db.prepare('DELETE FROM instances WHERE id = ?').run(instanceId);
