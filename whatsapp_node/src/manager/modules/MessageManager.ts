@@ -12,24 +12,31 @@ export class MessageManager {
         this.io.emit('chat_update', { instanceId: this.instanceId });
     }
 
-    async saveMessageToDb(m: WAMessage) {
-        try {
-            const message = m.message;
-            if (!message) return;
-
-            const db = getDb();
-        const jid = normalizeJid(m.key.remoteJid!);
-        const whatsapp_id = m.key.id!;
-        const timestamp = new Date(Number(m.messageTimestamp) * 1000).toISOString();
-        const is_from_me = m.key.fromMe ? 1 : 0;
-        const sender_jid = m.key.participant ? normalizeJid(m.key.participant) : jid;
-        const sender_name = m.pushName || "Unknown";
-
-        if (jid === 'status@broadcast') {
-            await this.handleStatusUpdate(m);
-            return;
-        }
-
+        async saveMessageToDb(m: WAMessage) {
+            try {
+                const message = m.message;
+                if (!message) return;
+    
+                const db = getDb();
+                // Normalize JID: remove device suffixes AND handle @lid/@s.whatsapp.net split
+                let rawJid = m.key.remoteJid!;
+                const jid = normalizeJid(rawJid);
+                
+                const whatsapp_id = m.key.id || `fallback_${Date.now()}_${Math.random()}`;
+                const timestamp = new Date(Number(m.messageTimestamp) * 1000).toISOString();
+                const is_from_me = m.key.fromMe ? 1 : 0;
+                            const sender_jid = m.key.participant ? normalizeJid(m.key.participant) : jid;
+                            
+                            // Resolve Name: 1. PushName, 2. Contacts DB, 3. JID fallback
+                            let resolvedName = m.pushName;
+                            if (!resolvedName || resolvedName === "Unknown") {
+                                const contact = db.prepare('SELECT name FROM contacts WHERE instance_id = ? AND jid = ?').get(this.instanceId, jid) as any;
+                                resolvedName = contact?.name || jid.split('@')[0];
+                            }
+                
+                            if (jid === 'status@broadcast') {                    await this.handleStatusUpdate(m);
+                    return;
+                }
         let text = message.conversation || message.extendedTextMessage?.text || "";
         let type: any = 'text';
         let media_path = null;
@@ -93,7 +100,7 @@ export class MessageManager {
             (instance_id, whatsapp_id, chat_jid, sender_jid, sender_name, text, type, media_path, latitude, longitude, vcard_data, status, timestamp, is_from_me) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(whatsapp_id) DO UPDATE SET text = excluded.text, status = excluded.status
-        `).run(this.instanceId, whatsapp_id, jid, sender_jid, sender_name, text, type, media_path, latitude, longitude, vcard_data, 'sent', timestamp, is_from_me);
+        `).run(this.instanceId, whatsapp_id, jid, sender_jid, resolvedName, text, type, media_path, latitude, longitude, vcard_data, 'sent', timestamp, is_from_me);
 
         db.prepare(`
             INSERT INTO chats (instance_id, jid, name, unread_count, last_message_timestamp) 
@@ -101,7 +108,7 @@ export class MessageManager {
             ON CONFLICT(instance_id, jid) DO UPDATE SET
             name = CASE WHEN (chats.name IS NULL OR chats.name = '' OR chats.name LIKE '%@s.whatsapp.net' OR chats.name = 'Unnamed Group') AND excluded.name IS NOT NULL AND excluded.name != '' THEN excluded.name ELSE chats.name END,
             last_message_timestamp = CASE WHEN excluded.last_message_timestamp IS NOT NULL THEN excluded.last_message_timestamp ELSE chats.last_message_timestamp END
-        `).run(this.instanceId, jid, sender_name, 0, timestamp);
+        `).run(this.instanceId, jid, resolvedName, 0, timestamp);
 
         db.prepare('UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ?').run(text || `[${type}]`, timestamp, this.instanceId, jid);
         this.io.emit('new_message', { instanceId: this.instanceId, jid, text });
