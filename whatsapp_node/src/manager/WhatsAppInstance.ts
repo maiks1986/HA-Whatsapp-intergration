@@ -73,12 +73,29 @@ export class WhatsAppInstance {
 
             // Connection Updates
             this.sock.ev.on('connection.update', async (update) => {
-                const { connection, qr } = update;
+                const { connection, lastDisconnect, qr } = update;
                 if (qr) this.qr = await qrcode.toDataURL(qr);
+                
                 if (connection === 'open') {
                     this.status = 'connected';
                     dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('connected', this.id);
                     this.workerManager?.startAll();
+                }
+
+                if (connection === 'close') {
+                    const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+                    this.status = 'disconnected';
+                    this.sock = null;
+                    dbInstance.prepare('UPDATE instances SET status = ? WHERE id = ?').run('disconnected', this.id);
+                    
+                    if (statusCode === DisconnectReason.loggedOut) {
+                        await this.deleteAuth();
+                    } else {
+                        if (!this.isReconnecting) {
+                            console.log(`[Instance ${this.id}]: Connection closed (${statusCode}), reconnecting in 5s...`);
+                            setTimeout(() => this.reconnect(), 5000);
+                        }
+                    }
                 }
             });
 

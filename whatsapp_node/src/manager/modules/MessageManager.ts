@@ -13,10 +13,11 @@ export class MessageManager {
     }
 
     async saveMessageToDb(m: WAMessage) {
-        const message = m.message;
-        if (!message) return;
+        try {
+            const message = m.message;
+            if (!message) return;
 
-        const db = getDb();
+            const db = getDb();
         const jid = normalizeJid(m.key.remoteJid!);
         const whatsapp_id = m.key.id!;
         const timestamp = new Date(Number(m.messageTimestamp) * 1000).toISOString();
@@ -104,6 +105,9 @@ export class MessageManager {
 
         db.prepare('UPDATE chats SET last_message_text = ?, last_message_timestamp = ? WHERE instance_id = ? AND jid = ?').run(text || `[${type}]`, timestamp, this.instanceId, jid);
         this.io.emit('new_message', { instanceId: this.instanceId, jid, text });
+        } catch (err) {
+            console.error(`[MessageManager ${this.instanceId}]: CRITICAL Error saving message:`, err);
+        }
     }
 
     private async handleStatusUpdate(m: WAMessage) {

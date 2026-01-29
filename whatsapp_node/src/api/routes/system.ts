@@ -59,6 +59,20 @@ export const systemRouter = () => {
         } catch (e) { res.status(500).json({ error: "Failed to read logs" }); }
     });
 
+    router.get('/debug/db/:table', requireAuth, (req, res) => {
+        const { table } = req.params;
+        const limit = parseInt(req.query.limit as string) || 50;
+        const offset = parseInt(req.query.offset as string) || 0;
+        
+        const allowedTables = ['messages', 'chats', 'contacts', 'instances', 'settings'];
+        if (!allowedTables.includes(table)) return res.status(400).json({ error: "Invalid table" });
+
+        try {
+            const data = db.prepare(`SELECT * FROM ${table} ORDER BY rowid DESC LIMIT ? OFFSET ?`).all(limit, offset);
+            res.json(data);
+        } catch (e: any) { res.status(500).json({ error: e.message }); }
+    });
+
     router.post('/ai/analyze', requireAuth, async (req, res) => {
         const intent = await aiService.analyzeIntent(req.body.messages);
         res.json({ intent });

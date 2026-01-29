@@ -1,3 +1,9 @@
+// Add timestamp to console logs IMMEDIATELY
+const originalLog = console.log;
+const originalError = console.error;
+console.log = (...args) => originalLog(`[${new Date().toISOString()}]`, ...args);
+console.error = (...args) => originalError(`[${new Date().toISOString()}]`, ...args);
+
 import express from 'express';
 import { Server as SocketServer } from 'socket.io';
 import http from 'http';
@@ -22,11 +28,6 @@ import { normalizeJid } from './utils';
 
 process.on('uncaughtException', (err) => console.error('CRITICAL Exception:', err));
 process.on('unhandledRejection', (reason, promise) => console.error('CRITICAL Rejection:', promise, 'reason:', reason));
-
-const originalLog = console.log;
-const originalError = console.error;
-console.log = (...args) => originalLog(`[${new Date().toISOString()}]`, ...args);
-console.error = (...args) => originalError(`[${new Date().toISOString()}]`, ...args);
 
 const app = express();
 const server = http.createServer(app);

@@ -59,9 +59,12 @@ export class WorkerManager {
             `).get(this.instanceId) as any;
 
             if (!chat) {
+                console.log(`[Sync Worker ${this.instanceId}]: No more chats to sync.`);
                 this.historyWorker = null;
                 return;
             }
+            
+            console.log(`[Sync Worker ${this.instanceId}]: Syncing history for ${chat.jid}...`);
 
             try {
                 const oldest = db.prepare('SELECT whatsapp_id, timestamp, is_from_me FROM messages WHERE instance_id = ? AND chat_jid = ? ORDER BY timestamp ASC LIMIT 1').get(this.instanceId, chat.jid) as any;
