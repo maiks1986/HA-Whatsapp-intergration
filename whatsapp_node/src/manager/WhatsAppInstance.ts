@@ -32,6 +32,8 @@ export class WhatsAppInstance {
     private io: any;
     private logger: any;
 
+    private logPath: string;
+
     // Managers
     private messageManager: MessageManager | null = null;
     private workerManager: WorkerManager | null = null;
@@ -46,6 +48,7 @@ export class WhatsAppInstance {
         this.authPath = process.env.NODE_ENV === 'development'
             ? path.join(__dirname, `../../auth_info_${id}`)
             : `/data/auth_info_${id}`;
+        this.logPath = process.env.NODE_ENV === 'development' ? path.join(__dirname, '../../raw_events.log') : '/data/raw_events.log';
         this.logger = pino({ level: this.debugEnabled ? 'debug' : 'info' });
         this.qrManager = new QRManager();
     }
@@ -76,7 +79,13 @@ export class WhatsAppInstance {
 
             // 1. ATTACH CATCH-ALL IMMEDIATELY (Do not move this!)
             (this.sock.ev as any).on('events', (events: any) => {
-                this.io.emit('raw_whatsapp_event', { timestamp: new Date().toISOString(), instanceId: this.id, events });
+                const eventData = { timestamp: new Date().toISOString(), instanceId: this.id, events };
+                this.io.emit('raw_whatsapp_event', eventData);
+                
+                // Log to file
+                try {
+                    fs.appendFileSync(this.logPath, JSON.stringify(eventData) + '\n');
+                } catch (e) { console.error('Failed to write to raw_events.log', e); }
                 
                 // If we see the Timeout message, trigger a manual history refresh check
                 if (JSON.stringify(events).includes('Timeout in AwaitingInitialSync')) {

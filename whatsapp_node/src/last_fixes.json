@@ -1,9 +1,8 @@
 {
-  "timestamp": "2026-01-29T23:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0008. Added 'lid' column to contacts table to better support Multi-Device identities and fix mismatched numbers.",
+  "timestamp": "2026-01-29T23:30:00.000Z",
+  "description": "Bumped version to 1.9.1.0009. Fixed System Debugger not showing history by implementing raw event logging to file.",
   "modules_affected": [
-    "whatsapp_node/src/db/database.ts",
-    "whatsapp_node/src/manager/modules/MessageManager.ts",
+    "whatsapp_node/src/manager/WhatsAppInstance.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"
