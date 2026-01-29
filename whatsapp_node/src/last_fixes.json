@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-01-29T10:30:00.000Z",
+  "description": "Fixed QR code display, backend socket sync, stale frontend state, database migrations, and instance deletion bugs.",
+  "modules_affected": [
+    "QRManager.ts (New)",
+    "QRSystem.tsx (New)",
+    "WhatsAppInstance.ts",
+    "instances.ts",
+    "useWhatsApp.ts",
+    "database.ts"
+  ]
+}

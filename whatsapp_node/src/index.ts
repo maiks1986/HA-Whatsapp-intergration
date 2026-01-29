@@ -52,6 +52,16 @@ const getAddonConfig = () => {
 
 async function bootstrap() {
     console.log('--- STARTING BOOTSTRAP ---');
+    try {
+        const fixes = require('./last_fixes.json');
+        console.log('--- BUILD VERSION INFO ---');
+        console.log(`Timestamp: ${fixes.timestamp}`);
+        console.log(`Description: ${fixes.description}`);
+        console.log('--------------------------');
+    } catch (e) {
+        console.log('Build version info not found.');
+    }
+
     await new Promise(r => setTimeout(r, 5000));
 
     const config = getAddonConfig();
