@@ -4,11 +4,12 @@ import { getDb } from '../db/database';
 
 export const identityResolver = (req: Request, res: Response, next: NextFunction) => {
     const userId = req.headers['x-hass-user-id'] as string;
+    const ingressPath = req.headers['x-ingress-path'] as string;
     const isAdmin = req.headers['x-hass-is-admin'] === '1' || req.headers['x-hass-is-admin'] === 'true';
     
     // Debug Ingress Headers
-    if (userId) {
-        console.log(`[Auth] Ingress request from ${userId} (Admin: ${isAdmin})`);
+    if (userId || ingressPath) {
+        // console.log(`[Auth] Ingress request. User: ${userId}, Path: ${ingressPath}`);
     }
 
     // 0. Dev Token Bypass
@@ -19,8 +20,9 @@ export const identityResolver = (req: Request, res: Response, next: NextFunction
     }
 
     // 1. Check for Ingress Headers (Auto-Login)
-    if (userId) {
-        (req as any).haUser = { id: userId, isAdmin, source: 'ingress' } as AuthUser;
+    if (userId || ingressPath) {
+        // If userId is missing but we have ingressPath, it's still a valid Ingress request.
+        (req as any).haUser = { id: userId || 'ingress_user', isAdmin: userId ? isAdmin : true, source: 'ingress' } as AuthUser;
         return next();
     }
 
