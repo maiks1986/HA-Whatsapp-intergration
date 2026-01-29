@@ -145,6 +145,19 @@ export function initDatabase() {
     ensureColumn('contacts', 'lid', 'TEXT');
     ensureColumn('contacts', 'profile_picture', 'TEXT');
 
+    // Ephemeral Message Migrations
+    ensureColumn('chats', 'ephemeral_mode', 'INTEGER DEFAULT 0');
+    ensureColumn('chats', 'ephemeral_timer', 'INTEGER DEFAULT 60'); // Minutes
+    ensureColumn('chats', 'ephemeral_start_timestamp', 'DATETIME');
+    ensureColumn('messages', 'deleted_on_device', 'INTEGER DEFAULT 0');
+
+    // Default Settings for Ephemeral Triggers
+    const ensureSetting = (key: string, value: string) => {
+        db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)').run(key, value);
+    };
+    ensureSetting('ephemeral_trigger_start', '👻');
+    ensureSetting('ephemeral_trigger_stop', '🛑');
+
     console.log('DATABASE: Initialization and Migrations complete.');
 }
 

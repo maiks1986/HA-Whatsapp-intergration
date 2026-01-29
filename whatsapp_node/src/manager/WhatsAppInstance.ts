@@ -18,6 +18,7 @@ import { MessageManager } from './modules/MessageManager';
 import { WorkerManager } from './modules/WorkerManager';
 import { ChatManager } from './modules/ChatManager';
 import { QRManager } from './modules/QRManager';
+import { EphemeralManager } from './modules/EphemeralManager';
 
 export class WhatsAppInstance {
     public id: number;
@@ -27,17 +28,17 @@ export class WhatsAppInstance {
     public status: string = 'disconnected';
     public presence: 'available' | 'unavailable' = 'available';
     private authPath: string;
+    private logPath: string;
     private isReconnecting: boolean = false;
     private debugEnabled: boolean;
     private io: any;
     private logger: any;
 
-    private logPath: string;
-
     // Managers
     private messageManager: MessageManager | null = null;
     private workerManager: WorkerManager | null = null;
     private chatManager: ChatManager | null = null;
+    public ephemeralManager: EphemeralManager | null = null;
     private qrManager: QRManager;
     
     // Health Monitor
@@ -123,6 +124,8 @@ export class WhatsAppInstance {
             this.messageManager = new MessageManager(this.id, this.sock, this.io, this.logger);
             this.workerManager = new WorkerManager(this.id, this.sock, () => this.status, () => this.reconnect());
             this.chatManager = new ChatManager(this.id, this.sock, this.io);
+            this.ephemeralManager = new EphemeralManager(this.id, this.sock, this.io);
+            this.ephemeralManager.start();
 
             // Connection Updates
             this.sock.ev.on('connection.update', async (update) => {
@@ -168,7 +171,20 @@ export class WhatsAppInstance {
             this.sock.ev.on('contacts.upsert', (contacts) => this.messageManager?.handleContactsUpsert(contacts));
             this.sock.ev.on('contacts.update', (updates) => this.messageManager?.handleContactsUpdate(updates));
 
-            this.sock.ev.on('messages.upsert', (m) => this.messageManager?.handleIncomingMessages(m));
+            this.sock.ev.on('messages.upsert', async (m) => {
+                this.messageManager?.handleIncomingMessages(m);
+                
+                // Ephemeral Trigger Check
+                if (m.messages[0].message) {
+                    const msg = m.messages[0];
+                    const jid = normalizeJid(msg.key.remoteJid!);
+                    const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text;
+                    const isFromMe = msg.key.fromMe || false;
+                    if (text) {
+                        this.ephemeralManager?.handleIncomingMessage(jid, text, isFromMe);
+                    }
+                }
+            });
 
             this.sock.ev.on('message-receipt.update', (updates) => {
                 for (const { key, receipt } of updates) {

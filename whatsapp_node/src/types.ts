@@ -23,6 +23,8 @@ export interface Chat {
     last_message_timestamp?: string | null;
     is_archived?: number;
     is_pinned?: number;
+    ephemeral_mode?: number;
+    ephemeral_timer?: number;
 }
 
 export interface Message {

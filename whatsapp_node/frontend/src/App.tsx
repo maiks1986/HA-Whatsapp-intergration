@@ -142,6 +142,7 @@ const App = () => {
         onSendMessage={handleSendMessage}
         onAiDraft={handleAiDraft}
         onModifyChat={(action) => wa.selectedInstance && wa.selectedChat && api.modifyChat(wa.selectedInstance.id, wa.selectedChat.jid, action).then(() => wa.fetchChats(wa.selectedInstance!.id))}
+        onToggleEphemeral={(enabled) => wa.selectedInstance && wa.selectedChat && api.toggleEphemeral(wa.selectedInstance.id, wa.selectedChat.jid, enabled).then(() => wa.fetchChats(wa.selectedInstance!.id))}
       />
 
       {showGroupModal && (

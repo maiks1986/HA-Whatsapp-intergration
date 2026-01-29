@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { CircleDot, Sparkles, RefreshCw, BrainCircuit, Eraser, Send, MessageSquare } from 'lucide-react';
+import { CircleDot, Sparkles, RefreshCw, BrainCircuit, Eraser, Send, MessageSquare, Ghost } from 'lucide-react';
 import { Chat, Message } from '../types';
 import { MessageBubble } from './MessageBubble';
 
@@ -16,6 +16,7 @@ interface ChatViewProps {
   onSendMessage: () => void;
   onAiDraft: () => void;
   onModifyChat: (action: 'archive' | 'pin' | 'delete') => void;
+  onToggleEphemeral: (enabled: boolean) => void;
 }
 
 export const ChatView: React.FC<ChatViewProps> = ({
@@ -30,7 +31,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
   isAiLoading,
   onSendMessage,
   onAiDraft,
-  onModifyChat
+  onModifyChat,
+  onToggleEphemeral
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); };
@@ -56,9 +58,15 @@ export const ChatView: React.FC<ChatViewProps> = ({
     <div className="flex-1 flex flex-col relative shadow-2xl min-w-0">
       <header className="p-4 bg-slate-50 border-b flex justify-between items-center shadow-sm z-10">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-slate-300 rounded-full flex items-center justify-center shadow-inner text-slate-500"><CircleDot size={24} /></div>
+          <div className="w-10 h-10 bg-slate-300 rounded-full flex items-center justify-center shadow-inner text-slate-500 relative">
+            <CircleDot size={24} />
+            {selectedChat.ephemeral_mode === 1 && <div className="absolute -bottom-1 -right-1 bg-slate-800 text-white p-0.5 rounded-full border border-white"><Ghost size={10} /></div>}
+          </div>
           <div>
-            <h3 className="font-bold leading-tight text-slate-800">{selectedChat.name}</h3>
+            <h3 className="font-bold leading-tight text-slate-800 flex items-center gap-2">
+                {selectedChat.name}
+                {selectedChat.ephemeral_mode === 1 && <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-black uppercase tracking-widest">Ephemeral: {selectedChat.ephemeral_timer}m</span>}
+            </h3>
             {presenceMap[selectedChat.jid] ? (
               <span className="text-[10px] text-teal-600 font-bold animate-pulse uppercase">{presenceMap[selectedChat.jid]}...</span>
             ) : (
@@ -67,6 +75,14 @@ export const ChatView: React.FC<ChatViewProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-2 text-slate-400">
+          <button 
+            onClick={() => onToggleEphemeral(!selectedChat.ephemeral_mode)} 
+            className={`p-2 rounded-lg hover:bg-slate-100 transition-all ${selectedChat.ephemeral_mode === 1 ? 'text-purple-600 bg-purple-50' : 'hover:text-purple-500'}`} 
+            title={selectedChat.ephemeral_mode === 1 ? "Disable Ephemeral Mode" : "Enable Ephemeral Mode (60m)"}
+          >
+            <Ghost size={20} />
+          </button>
+          <div className="w-px h-6 bg-slate-200 mx-1"></div>
           <button onClick={() => onModifyChat('pin')} className={`p-2 rounded-lg hover:bg-slate-100 ${selectedChat.is_pinned ? 'text-teal-600' : ''}`} title="Pin Chat">Pin</button>
           <button onClick={() => onModifyChat('archive')} className="p-2 rounded-lg hover:bg-slate-100" title="Archive Chat">Archive</button>
           <button onClick={() => onModifyChat('delete')} className="p-2 rounded-lg hover:bg-red-50 hover:text-red-500" title="Delete Chat">Delete</button>

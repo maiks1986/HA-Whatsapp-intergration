@@ -23,7 +23,9 @@ export const messagingRouter = () => {
                 c.last_message_text, 
                 c.last_message_timestamp,
                 c.is_archived,
-                c.is_pinned
+                c.is_pinned,
+                c.ephemeral_mode,
+                c.ephemeral_timer
             FROM chats c
             LEFT JOIN contacts co ON c.jid = co.jid AND c.instance_id = co.instance_id
             WHERE c.instance_id = ? 
@@ -88,6 +90,20 @@ export const messagingRouter = () => {
         const inst = engineManager.getInstance(parseInt(instanceId));
         if (!inst) return res.status(404).json({ error: "Not found" });
         await inst.modifyChat(normalized, action);
+        res.json({ success: true });
+    });
+
+    router.post('/chats/:instanceId/:jid/ephemeral', requireAuth, async (req, res) => {
+        const { instanceId, jid } = req.params;
+        const { enabled, timer } = req.body;
+        const inst = engineManager.getInstance(parseInt(instanceId));
+        if (!inst || !inst.ephemeralManager) return res.status(404).json({ error: "Not found" });
+        
+        if (enabled) {
+            await inst.ephemeralManager.enableForChat(jid, timer || 60);
+        } else {
+            await inst.ephemeralManager.disableForChat(jid);
+        }
         res.json({ success: true });
     });
 

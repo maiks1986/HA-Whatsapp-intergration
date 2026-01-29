@@ -35,6 +35,9 @@ export const api = {
   getContacts: (instanceId: number) => axios.get<Contact[]>(`/api/contacts/${instanceId}`),
   modifyChat: (instanceId: number, jid: string, action: 'archive' | 'pin' | 'delete') => 
     axios.post(`/api/chats/${instanceId}/${jid}/modify`, { action }),
+  
+  toggleEphemeral: (instanceId: number, jid: string, enabled: boolean, timer: number = 60) =>
+    axios.post(`/api/chats/${instanceId}/${jid}/ephemeral`, { enabled, timer }),
 
   // Messages
   getMessages: (instanceId: number, jid: string) => axios.get<Message[]>(`/api/messages/${instanceId}/${jid}`),
