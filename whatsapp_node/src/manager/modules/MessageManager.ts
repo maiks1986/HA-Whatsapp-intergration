@@ -209,8 +209,14 @@ export class MessageManager {
                 return;
             }
 
-            // FILTER: Skip empty text messages (prevents ghost messages from protocol events/syncs)
-            if (type === 'text' && (!text || text.trim().length === 0) && !media_path) {
+            // FILTER: STRICTER - Skip empty text messages (prevents ghost messages from protocol events/syncs)
+            const isTextType = type === 'text';
+            const hasNoContent = !text || text.trim().length === 0;
+            const hasNoMedia = !media_path;
+            const hasNoVcard = !vcard_data;
+            const hasNoLocation = !latitude && !longitude;
+
+            if (isTextType && hasNoContent && hasNoMedia && hasNoVcard && hasNoLocation) {
                 // console.log(`[MessageManager ${this.instanceId}]: Skipping empty message from ${sender_jid}`);
                 return;
             }

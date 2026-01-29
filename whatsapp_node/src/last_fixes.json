@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-01-29T23:30:00.000Z",
-  "description": "Bumped version to 1.9.1.0009. Fixed System Debugger not showing history by implementing raw event logging to file.",
+  "timestamp": "2026-01-30T00:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0010. Implemented stricter message filtering to prevent empty 'ghost' messages from clogging the database.",
   "modules_affected": [
-    "whatsapp_node/src/manager/WhatsAppInstance.ts",
+    "whatsapp_node/src/manager/modules/MessageManager.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"
