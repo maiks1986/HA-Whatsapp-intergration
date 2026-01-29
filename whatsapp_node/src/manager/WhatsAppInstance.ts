@@ -106,6 +106,12 @@ export class WhatsAppInstance {
                 this.io.emit('raw_whatsapp_event', { timestamp: new Date().toISOString(), instanceId: this.id, events });
             });
 
+            this.sock.ev.on('messaging-history.set', (payload) => this.messageManager?.handleHistorySet(payload));
+            this.sock.ev.on('chats.upsert', (chats) => this.messageManager?.handleChatsUpsert(chats));
+            this.sock.ev.on('chats.update', (updates) => this.messageManager?.handleChatsUpdate(updates));
+            this.sock.ev.on('contacts.upsert', (contacts) => this.messageManager?.handleContactsUpsert(contacts));
+            this.sock.ev.on('contacts.update', (updates) => this.messageManager?.handleContactsUpdate(updates));
+
             this.sock.ev.on('messages.upsert', (m) => this.messageManager?.handleIncomingMessages(m));
 
             this.sock.ev.on('message-receipt.update', (updates) => {
