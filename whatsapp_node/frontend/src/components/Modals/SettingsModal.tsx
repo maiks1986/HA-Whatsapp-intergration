@@ -9,6 +9,10 @@ interface SettingsModalProps {
   setAutoNudge: (n: boolean) => void;
   syncDelay: number;
   setSyncDelay: (d: number) => void;
+  ephemeralStart: string;
+  setEphemeralStart: (s: string) => void;
+  ephemeralStop: string;
+  setEphemeralStop: (s: string) => void;
   onSave: () => void;
   onReset: () => void;
 }
@@ -21,12 +25,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   setAutoNudge, 
   syncDelay,
   setSyncDelay,
+  ephemeralStart,
+  setEphemeralStart,
+  ephemeralStop,
+  setEphemeralStop,
   onSave, 
   onReset 
 }) => {
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl w-[450px] border border-slate-100 animate-in zoom-in-95 duration-300">
+      <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl w-[450px] border border-slate-100 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-8">
           <h3 className="font-black text-2xl flex items-center gap-3 text-slate-800 uppercase tracking-tighter">
             <Settings className="text-teal-600" /> System Config
@@ -45,6 +53,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               placeholder="Paste key..." 
               className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-teal-500 focus:bg-white transition-all text-sm font-mono shadow-inner" 
             />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 ml-1">Ephemeral Trigger Emojis</label>
+            <div className="flex gap-4">
+                <div className="flex-1">
+                    <span className="text-[9px] text-teal-600 font-bold uppercase block mb-1">Start Trigger</span>
+                    <input 
+                      type="text" 
+                      value={ephemeralStart} 
+                      onChange={(e) => setEphemeralStart(e.target.value)} 
+                      className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none text-center text-xl" 
+                      maxLength={2}
+                    />
+                </div>
+                <div className="flex-1">
+                    <span className="text-[9px] text-red-500 font-bold uppercase block mb-1">Stop Trigger</span>
+                    <input 
+                      type="text" 
+                      value={ephemeralStop} 
+                      onChange={(e) => setEphemeralStop(e.target.value)} 
+                      className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none text-center text-xl" 
+                      maxLength={2}
+                    />
+                </div>
+            </div>
           </div>
 
           <div>

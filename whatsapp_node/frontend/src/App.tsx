@@ -40,6 +40,8 @@ const App = () => {
       api.getSetting('gemini_api_key').then(res => wa.setGeminiKey(res.data.value));
       api.getSetting('auto_nudge_enabled').then(res => wa.setAutoNudge(res.data.value !== 'false'));
       api.getSetting('sync_delay_ms').then(res => res.data.value && wa.setSyncDelay(parseInt(res.data.value)));
+      api.getSetting('ephemeral_trigger_start').then(res => res.data.value && wa.setEphemeralStartEmoji(res.data.value));
+      api.getSetting('ephemeral_trigger_stop').then(res => res.data.value && wa.setEphemeralStopEmoji(res.data.value));
     }
   }, [auth.authState]);
 
@@ -95,6 +97,8 @@ const App = () => {
     await api.saveSetting('gemini_api_key', wa.geminiKey);
     await api.saveSetting('auto_nudge_enabled', wa.autoNudge.toString());
     await api.saveSetting('sync_delay_ms', wa.syncDelay.toString());
+    await api.saveSetting('ephemeral_trigger_start', wa.ephemeralStartEmoji);
+    await api.saveSetting('ephemeral_trigger_stop', wa.ephemeralStopEmoji);
     setIsSettingsOpen(false);
   };
 
@@ -168,6 +172,10 @@ const App = () => {
           setAutoNudge={wa.setAutoNudge}
           syncDelay={wa.syncDelay}
           setSyncDelay={wa.setSyncDelay}
+          ephemeralStart={wa.ephemeralStartEmoji}
+          setEphemeralStart={wa.setEphemeralStartEmoji}
+          ephemeralStop={wa.ephemeralStopEmoji}
+          setEphemeralStop={wa.setEphemeralStopEmoji}
           onSave={handleSaveSettings}
           onReset={() => api.resetSystem().then(() => window.location.reload())}
         />

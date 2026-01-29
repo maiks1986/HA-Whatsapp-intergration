@@ -18,6 +18,8 @@ export const useWhatsApp = (authState: string) => {
   const [autoNudge, setAutoNudge] = useState(true);
   const [syncDelay, setSyncDelay] = useState(2000);
   const [geminiKey, setGeminiKey] = useState('');
+  const [ephemeralStartEmoji, setEphemeralStartEmoji] = useState('👻');
+  const [ephemeralStopEmoji, setEphemeralStopEmoji] = useState('🛑');
   
   // Group specific state
   const [newGroupTitle, setNewGroupTitle] = useState('');
@@ -130,6 +132,10 @@ export const useWhatsApp = (authState: string) => {
     setSyncDelay,
     geminiKey,
     setGeminiKey,
+    ephemeralStartEmoji,
+    setEphemeralStartEmoji,
+    ephemeralStopEmoji,
+    setEphemeralStopEmoji,
     newGroupTitle,
     setNewGroupTitle,
     selectedContacts,

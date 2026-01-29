@@ -1,12 +1,10 @@
 {
-  "timestamp": "2026-01-30T06:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0021. Added 'Ephemeral Mode' feature. Use the Ghost icon in the chat header or send 👻/🛑 to toggle auto-deletion of messages on the device (while keeping them in the Add-on).",
+  "timestamp": "2026-01-30T07:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0022. Added frontend settings UI to configure 'Start' and 'Stop' emojis for Ephemeral Mode.",
   "modules_affected": [
-    "whatsapp_node/src/manager/modules/EphemeralManager.ts",
-    "whatsapp_node/src/manager/WhatsAppInstance.ts",
-    "whatsapp_node/src/api/routes/messaging.ts",
-    "whatsapp_node/src/db/database.ts",
-    "whatsapp_node/frontend/src/components/ChatView.tsx",
+    "whatsapp_node/frontend/src/components/Modals/SettingsModal.tsx",
+    "whatsapp_node/frontend/src/App.tsx",
+    "whatsapp_node/frontend/src/hooks/useWhatsApp.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"
