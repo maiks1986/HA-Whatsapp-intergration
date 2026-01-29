@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-ha-engine",
-  "version": "1.9.1.0018",
+  "version": "1.9.1.0019",
   "description": "Browserless WhatsApp Engine for Home Assistant",
   "main": "dist/index.js",
   "scripts": {
@@ -18,7 +18,7 @@
     "cors": "^2.8.5",
     "axios": "^1.7.2",
     "uuid": "^10.0.0",
-    "@google/generative-ai": "^0.21.0"
+    "@google/generative-ai": "^0.24.1"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.10",

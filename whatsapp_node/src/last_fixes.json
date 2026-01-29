@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-01-30T04:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0018. Changed Gemini model to 'gemini-1.5-flash-001' (explicit version) to resolve 404 errors.",
+  "timestamp": "2026-01-30T04:30:00.000Z",
+  "description": "Bumped version to 1.9.1.0019. Switched AI model to 'gemini-2.5-flash-lite' and updated @google/generative-ai library to ^0.24.1.",
   "modules_affected": [
     "whatsapp_node/src/services/AiService.ts",
     "whatsapp_node/config.yaml",

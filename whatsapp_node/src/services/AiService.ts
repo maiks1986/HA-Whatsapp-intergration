@@ -47,7 +47,7 @@ class AiService {
         const client = await this.getClient();
         if (!client) return "API Key Missing";
 
-        const model = client.getGenerativeModel({ model: "gemini-1.5-flash-001" });
+        const model = client.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
         
         const context = messages.map(m => `${m.is_from_me ? 'Me' : 'Them'}: ${m.text}`).join('\n');
         const prompt = `
@@ -74,7 +74,7 @@ class AiService {
         const client = await this.getClient();
         if (!client) return "API Key Missing";
 
-        const model = client.getGenerativeModel({ model: "gemini-1.5-flash-001" });
+        const model = client.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
         
         const context = messages.map(m => `${m.is_from_me ? 'Me' : 'Them'}: ${m.text}`).join('\n');
         const prompt = `
