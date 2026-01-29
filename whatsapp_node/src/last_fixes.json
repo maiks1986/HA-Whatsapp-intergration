@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-01-30T00:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0010. Implemented stricter message filtering to prevent empty 'ghost' messages from clogging the database.",
+  "timestamp": "2026-01-30T00:30:00.000Z",
+  "description": "Bumped version to 1.9.1.0011. Added debug logging for Contact Sync to investigate missing contact names.",
   "modules_affected": [
     "whatsapp_node/src/manager/modules/MessageManager.ts",
     "whatsapp_node/config.yaml",

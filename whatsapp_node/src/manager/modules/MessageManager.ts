@@ -13,6 +13,11 @@ export class MessageManager {
         const { chats, contacts, messages } = payload;
         const db = getDb();
         console.log(`[Sync ${this.instanceId}]: Processing Initial History Set (${chats?.length || 0} chats, ${contacts?.length || 0} contacts)`);
+        
+        // DEBUG: Log first contact to see structure
+        if (contacts && contacts.length > 0) {
+            console.log(`[Sync ${this.instanceId}]: Sample Contact:`, JSON.stringify(contacts[0], null, 2));
+        }
 
         db.transaction(() => {
             // 1. First, save all contacts to ensure naming fallbacks exist
@@ -81,6 +86,9 @@ export class MessageManager {
 
     async handleContactsUpsert(contacts: Contact[]) {
         const db = getDb();
+        console.log(`[Contacts Upsert ${this.instanceId}]: Received ${contacts.length} contacts`);
+        if (contacts.length > 0) console.log(`[Contacts Upsert] Sample:`, JSON.stringify(contacts[0]));
+
         for (const contact of contacts) {
             let id = contact.id;
             const lid = (contact as any).lid || (id.includes('@lid') ? id : null);
