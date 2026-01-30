@@ -1,10 +1,8 @@
 {
-  "timestamp": "2026-01-30T09:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0024. Fixed frontend API calls to use relative paths, resolving Ingress authentication and 404 errors in the Debugger.",
+  "timestamp": "2026-01-30T10:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0025. Added temporary insecure endpoint /api/debug/raw_logs_dump to stream log file directly for debugging access issues.",
   "modules_affected": [
-    "whatsapp_node/frontend/src/Debug.tsx",
-    "whatsapp_node/frontend/src/api/index.ts",
-    "whatsapp_node/frontend/src/App.tsx",
+    "whatsapp_node/src/api/routes/system.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"

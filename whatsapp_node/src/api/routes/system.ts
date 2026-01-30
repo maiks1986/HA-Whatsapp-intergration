@@ -59,6 +59,16 @@ export const systemRouter = () => {
         } catch (e) { res.status(500).json({ error: "Failed to read logs" }); }
     });
 
+    // TEMP DEBUG: Insecure Dump
+    router.get('/debug/raw_logs_dump', (req, res) => {
+        const logPath = process.env.NODE_ENV === 'development' ? './raw_events.log' : '/data/raw_events.log';
+        if (!fs.existsSync(logPath)) return res.send("No log file found.");
+        
+        res.setHeader('Content-Type', 'text/plain');
+        const stream = fs.createReadStream(logPath);
+        stream.pipe(res);
+    });
+
     router.get('/debug/db/:table', requireAuth, (req, res) => {
         const { table } = req.params;
         const limit = parseInt(req.query.limit as string) || 50;
