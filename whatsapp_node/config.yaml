@@ -1,5 +1,5 @@
 name: "WhatsApp Node Engine"
-version: "1.9.1.0028"
+version: "1.9.1.0029"
 slug: "whatsapp_node_engine"
 description: "Browserless WhatsApp Engine with AI and Native HA Auth"
 arch:

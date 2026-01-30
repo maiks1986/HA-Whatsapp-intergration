@@ -101,6 +101,7 @@ export class WhatsAppInstance {
 
             // 1. ATTACH CATCH-ALL IMMEDIATELY (Do not move this!)
             (this.sock.ev as any).on('events', (events: any) => {
+                // console.log(`[Instance ${this.id}] Event received: ${Object.keys(events).join(',')}`); // Debug listener
                 const eventData = { timestamp: new Date().toISOString(), instanceId: this.id, events };
                 this.io.emit('raw_whatsapp_event', eventData);
                 
@@ -149,6 +150,12 @@ export class WhatsAppInstance {
             // Connection Updates
             this.sock.ev.on('connection.update', async (update) => {
                 const { connection, lastDisconnect, qr } = update;
+                
+                // Explicit Log Test
+                try {
+                    fs.appendFileSync(this.logPath, JSON.stringify({ timestamp: new Date().toISOString(), type: 'connection.update', update }) + '\n');
+                } catch (e) {}
+
                 if (qr) {
                     await this.qrManager.processUpdate(qr);
                     this.emitStatusUpdate();
