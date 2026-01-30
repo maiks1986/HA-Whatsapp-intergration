@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-01-30T17:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0032. Refactored Debug Logging system to use robust multi-event listeners instead of a single catch-all. This fixes the issue where only connection updates were being logged.",
+  "timestamp": "2026-01-30T18:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0033. Fixed missing contact names by making contact sync aggressive (saving contacts without names) and implementing auto-learning from incoming messages.",
   "modules_affected": [
-    "whatsapp_node/src/manager/WhatsAppInstance.ts",
+    "whatsapp_node/src/manager/modules/MessageManager.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"

@@ -14,37 +14,28 @@ export class MessageManager {
         const db = getDb();
         console.log(`[Sync ${this.instanceId}]: Processing Initial History Set (${chats?.length || 0} chats, ${contacts?.length || 0} contacts)`);
         
-        // DEBUG: Log first contact to see structure
-        if (contacts && contacts.length > 0) {
-            console.log(`[Sync ${this.instanceId}]: Sample Contact:`, JSON.stringify(contacts[0], null, 2));
-        }
-
         db.transaction(() => {
-            // 1. First, save all contacts to ensure naming fallbacks exist
+            // 1. Save all contacts
             if (contacts) {
                 for (const contact of contacts) {
                     if (contact.id.includes('@broadcast')) continue;
                     
-                    let id = contact.id;
-                    const lid = contact.lid || (id.includes('@lid') ? id : null);
-                    
-                    // Basic heuristic: If ID is LID, checking if there's an obvious way to get Phone JID (not standard in Baileys types but checking 'phoneNumber')
-                    // Note: Baileys v7+ might separate these. For now, we store what we get, but capture LID.
-                    
+                    const id = contact.id;
                     const normalized = normalizeJid(id);
-                    const name = contact.name || contact.notify || contact.verifiedName;
-                    if (name) {
-                        db.prepare(`
-                            INSERT INTO contacts (instance_id, jid, name, lid) 
-                            VALUES (?, ?, ?, ?) 
-                            ON CONFLICT(instance_id, jid) DO UPDATE SET 
-                            name = excluded.name,
-                            lid = COALESCE(excluded.lid, contacts.lid)
-                        `).run(this.instanceId, normalized, name, lid);
-                    }
+                    const name = contact.name || contact.notify || contact.verifiedName || null;
+                    const lid = (contact as any).lid || (id.includes('@lid') ? id : null);
+                    
+                    // Save contact even if name is null - we might get it later or from a message
+                    db.prepare(`
+                        INSERT INTO contacts (instance_id, jid, name, lid) 
+                        VALUES (?, ?, ?, ?) 
+                        ON CONFLICT(instance_id, jid) DO UPDATE SET 
+                        name = CASE WHEN excluded.name IS NOT NULL THEN excluded.name ELSE contacts.name END,
+                        lid = COALESCE(excluded.lid, contacts.lid)
+                    `).run(this.instanceId, normalized, name, lid);
                 }
             }
-            // 2. Then, save all chats
+            // 2. Save all chats
             if (chats) {
                 for (const chat of chats) {
                     if (chat.id.includes('@broadcast')) continue;
@@ -55,7 +46,7 @@ export class MessageManager {
             }
         })();
 
-        // 3. Process historical messages (Outside transaction to handle individual media/logic)
+        // 3. Process historical messages
         if (messages) {
             console.log(`[Sync ${this.instanceId}]: Saving ${messages.length} historical messages...`);
             for (const msg of messages) await this.saveMessageToDb(msg);
@@ -86,25 +77,18 @@ export class MessageManager {
 
     async handleContactsUpsert(contacts: Contact[]) {
         const db = getDb();
-        console.log(`[Contacts Upsert ${this.instanceId}]: Received ${contacts.length} contacts`);
-        if (contacts.length > 0) console.log(`[Contacts Upsert] Sample:`, JSON.stringify(contacts[0]));
-
         for (const contact of contacts) {
-            let id = contact.id;
-            const lid = (contact as any).lid || (id.includes('@lid') ? id : null);
+            const normalized = normalizeJid(contact.id);
+            const name = contact.name || contact.notify || contact.verifiedName || null;
+            const lid = (contact as any).lid || (contact.id.includes('@lid') ? contact.id : null);
             
-            const normalized = normalizeJid(id);
-            const name = contact.name || contact.notify || contact.verifiedName;
-            
-            if (name) {
-                 db.prepare(`
-                    INSERT INTO contacts (instance_id, jid, name, lid) 
-                    VALUES (?, ?, ?, ?) 
-                    ON CONFLICT(instance_id, jid) DO UPDATE SET 
-                    name = excluded.name,
-                    lid = COALESCE(excluded.lid, contacts.lid)
-                `).run(this.instanceId, normalized, name, lid);
-            }
+            db.prepare(`
+                INSERT INTO contacts (instance_id, jid, name, lid) 
+                VALUES (?, ?, ?, ?) 
+                ON CONFLICT(instance_id, jid) DO UPDATE SET 
+                name = CASE WHEN excluded.name IS NOT NULL THEN excluded.name ELSE contacts.name END,
+                lid = COALESCE(excluded.lid, contacts.lid)
+            `).run(this.instanceId, normalized, name, lid);
         }
     }
 
@@ -112,11 +96,6 @@ export class MessageManager {
         const db = getDb();
         for (const update of updates) {
             if (!update.id) continue;
-            
-            // If update.id is LID, we should try to update the LID column for the corresponding Phone JID if we can...
-            // But we don't know the Phone JID here easily.
-            // So we just update the row where jid = update.id (which might be the LID row).
-            
             const normalized = normalizeJid(update.id);
             const name = update.name || update.notify || update.verifiedName;
             const lid = (update as any).lid;
@@ -151,22 +130,26 @@ export class MessageManager {
             const is_from_me = m.key.fromMe ? 1 : 0;
             const sender_jid = m.key.participant ? normalizeJid(m.key.participant) : jid;
 
-            // IDENTITY RESOLUTION: The Chat identity should always be the contact name (1-on-1) or group subject.
-            let chatIdentityName = this.resolveNameFromContacts(jid);
-
-            // SENDER NAME RESOLUTION:
-            // 1. Try `pushName` (The name they chose and sent with the message)
-            // 2. Try `contacts` table (Where we store `notify` name which is also their chosen name, or our manual name)
-            // 3. Fallback to "Unknown" (or maybe number?)
+            // SENDER NAME RESOLUTION & AUTO-LEARN
             let senderName = m.pushName;
-            if (!senderName) {
+            if (senderName && senderName !== 'Unknown') {
+                // If we got a name from the message, make sure it's in our contacts list for this JID
+                db.prepare(`
+                    INSERT INTO contacts (instance_id, jid, name) VALUES (?, ?, ?)
+                    ON CONFLICT(instance_id, jid) DO UPDATE SET name = CASE WHEN contacts.name IS NULL OR contacts.name = '' THEN excluded.name ELSE contacts.name END
+                `).run(this.instanceId, sender_jid, senderName);
+            }
+
+            if (!senderName || senderName === 'Unknown') {
                 const contactName = this.resolveNameFromContacts(sender_jid);
-                // resolveNameFromContacts returns number if no name found. We check if it's different.
                 if (contactName && contactName !== sender_jid.split('@')[0]) {
                     senderName = contactName;
                 }
             }
-            if (!senderName) senderName = "Unknown"; // Or consider using `sender_jid.split('@')[0]`
+            if (!senderName) senderName = "Unknown";
+
+            // IDENTITY RESOLUTION: The Chat identity should always be the contact name (1-on-1) or group subject.
+            let chatIdentityName = this.resolveNameFromContacts(jid);
 
             if (jid === 'status@broadcast') {
                 await this.handleStatusUpdate(m);
