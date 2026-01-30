@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-01-30T12:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0027. Implemented msgRetryCounterCache and custom browser config to fix WhatsApp login hang/timeout issues during initial sync.",
+  "timestamp": "2026-01-30T13:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0028. Reverted to standard 'Ubuntu Chrome' browser signature while keeping the retry cache, as the custom signature might have caused sync stalls.",
   "modules_affected": [
     "whatsapp_node/src/manager/WhatsAppInstance.ts",
     "whatsapp_node/package.json",

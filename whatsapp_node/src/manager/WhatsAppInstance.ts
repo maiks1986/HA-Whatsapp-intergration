@@ -89,7 +89,7 @@ export class WhatsAppInstance {
                     keys: makeCacheableSignalKeyStore(state.keys, this.logger),
                 },
                 printQRInTerminal: false,
-                browser: ['WhatsApp Node Engine', 'Chrome', '1.0.0'],
+                browser: Browsers.ubuntu('Chrome'),
                 syncFullHistory: true,
                 markOnlineOnConnect: this.presence === 'available',
                 connectTimeoutMs: 120000, // Increased to 2m
