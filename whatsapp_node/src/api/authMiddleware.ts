@@ -1,8 +1,23 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthUser } from '../types';
 import { getDb } from '../db/database';
+import fs from 'fs';
+
+const getOptions = () => {
+    try {
+        if (fs.existsSync('/data/options.json')) return JSON.parse(fs.readFileSync('/data/options.json', 'utf8'));
+    } catch (e) {}
+    return {};
+};
 
 export const identityResolver = (req: Request, res: Response, next: NextFunction) => {
+    // 0. Check Disable Auth Setting (Nuclear Option)
+    const options = getOptions();
+    if (options.disable_auth === true) {
+        (req as any).haUser = { id: 'admin', isAdmin: true, source: 'config_bypass' } as AuthUser;
+        return next();
+    }
+
     const userId = req.headers['x-hass-user-id'] as string;
     const ingressPath = req.headers['x-ingress-path'] as string;
     const isAdmin = req.headers['x-hass-is-admin'] === '1' || req.headers['x-hass-is-admin'] === 'true';

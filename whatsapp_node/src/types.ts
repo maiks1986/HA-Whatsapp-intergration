@@ -50,7 +50,7 @@ export interface Message {
 export interface AuthUser {
     id: string;
     isAdmin: boolean;
-    source: 'ingress' | 'direct' | 'dev';
+    source: 'ingress' | 'direct' | 'dev' | 'config_bypass';
 }
 
 export interface AddonConfig {

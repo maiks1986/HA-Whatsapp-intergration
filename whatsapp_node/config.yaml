@@ -1,5 +1,5 @@
 name: "WhatsApp Node Engine"
-version: "1.9.1.0030"
+version: "1.9.1.0031"
 slug: "whatsapp_node_engine"
 description: "Browserless WhatsApp Engine with AI and Native HA Auth"
 arch:
@@ -15,11 +15,13 @@ options:
   debug_logging: false
   reset_database: false
   gemini_api_key: ""
+  disable_auth: false
 schema:
   password: password?
   debug_logging: bool?
   reset_database: bool?
   gemini_api_key: password?
+  disable_auth: bool?
 ingress: true
 ingress_port: 5002
 ingress_entry: /
