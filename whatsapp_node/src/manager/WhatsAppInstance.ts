@@ -99,46 +99,47 @@ export class WhatsAppInstance {
                 msgRetryCounterCache: this.msgRetryCounterCache
             });
 
-            // 1. ATTACH CATCH-ALL IMMEDIATELY (Do not move this!)
-            (this.sock.ev as any).on('events', (events: any) => {
-                // console.log(`[Instance ${this.id}] Event received: ${Object.keys(events).join(',')}`); // Debug listener
-                const eventData = { timestamp: new Date().toISOString(), instanceId: this.id, events };
-                this.io.emit('raw_whatsapp_event', eventData);
-                
-                // Log to file
-                try {
-                    fs.appendFileSync(this.logPath, JSON.stringify(eventData) + '\n');
-                } catch (e) { console.error('Failed to write to raw_events.log', e); }
-                
-                const jsonEvents = JSON.stringify(events);
+            // 1. ATTACH ROBUST EVENT LOGGING
+            const trackedEvents: any[] = [
+                'connection.update', 'creds.update', 'messaging-history.set',
+                'chats.upsert', 'chats.update', 'chats.delete',
+                'presence.update', 'contacts.upsert', 'contacts.update',
+                'messages.delete', 'messages.update', 'messages.upsert',
+                'message-receipt.update', 'groups.update', 'group-participants.update'
+            ];
 
-                // HEALTH MONITOR: Detect Session Corruption (Bad MAC / SessionError loop)
-                if (jsonEvents.includes('Bad MAC') || jsonEvents.includes('SessionError') || jsonEvents.includes('No matching sessions')) {
-                    const now = Date.now();
-                    if (now - this.lastErrorTime > 60000) {
-                        this.errorCount = 0; // Reset count if > 1 minute since last burst
+            for (const eventName of trackedEvents) {
+                this.sock.ev.on(eventName, (data) => {
+                    const eventData = { 
+                        timestamp: new Date().toISOString(), 
+                        instanceId: this.id, 
+                        type: eventName, 
+                        payload: data 
+                    };
+                    
+                    // Emit live
+                    this.io.emit('raw_whatsapp_event', eventData);
+                    
+                    // Save to file
+                    try {
+                        fs.appendFileSync(this.logPath, JSON.stringify(eventData) + '\n');
+                    } catch (e) {}
+
+                    // Special Case: Auto-Reset on Bad MAC/Session Errors
+                    if (eventName === 'connection.update' && data.lastDisconnect?.error) {
+                        const errMessage = data.lastDisconnect.error.toString();
+                        if (errMessage.includes('Bad MAC') || errMessage.includes('SessionError')) {
+                            console.error(`[Instance ${this.id}]: CRITICAL - Detected Session Corruption. Deleting Auth.`);
+                            this.deleteAuth().then(() => {
+                                this.status = 'disconnected';
+                                this.emitStatusUpdate();
+                            });
+                        }
                     }
-                    this.errorCount++;
-                    this.lastErrorTime = now;
+                });
+            }
 
-                    if (this.errorCount > 5) { // 5 errors in < 1 minute is suspicious
-                        console.error(`[Instance ${this.id}]: CRITICAL - Detected Session Corruption (Bad MAC loop). Deleting Auth and Stopping.`);
-                        this.deleteAuth().then(() => {
-                            this.status = 'disconnected';
-                            this.emitStatusUpdate();
-                        });
-                        return;
-                    }
-                }
-                
-                // If we see the Timeout message, trigger a manual history refresh check
-                if (jsonEvents.includes('Timeout in AwaitingInitialSync')) {
-                    console.log(`[Instance ${this.id}]: Sync Timeout detected. Forcing History Worker...`);
-                    this.workerManager?.startAll();
-                }
-            });
-
-            // Initialize Managers
+            // 2. Initialize Managers
             this.messageManager = new MessageManager(this.id, this.sock, this.io, this.logger);
             this.workerManager = new WorkerManager(this.id, this.sock, () => this.status, () => this.reconnect());
             this.chatManager = new ChatManager(this.id, this.sock, this.io);
@@ -151,11 +152,6 @@ export class WhatsAppInstance {
             this.sock.ev.on('connection.update', async (update) => {
                 const { connection, lastDisconnect, qr } = update;
                 
-                // Explicit Log Test
-                try {
-                    fs.appendFileSync(this.logPath, JSON.stringify({ timestamp: new Date().toISOString(), type: 'connection.update', update }) + '\n');
-                } catch (e) {}
-
                 if (qr) {
                     await this.qrManager.processUpdate(qr);
                     this.emitStatusUpdate();
