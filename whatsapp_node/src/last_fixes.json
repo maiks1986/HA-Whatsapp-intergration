@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-01-30T14:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0029. Added explicit logging in 'connection.update' to raw_events.log to debug why the catch-all event listener might be silent.",
+  "timestamp": "2026-01-30T15:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0030. Added graceful shutdown handling (SIGINT/SIGTERM) to ensure WhatsApp sessions are closed properly before container exit, reducing risk of corruption.",
   "modules_affected": [
-    "whatsapp_node/src/manager/WhatsAppInstance.ts",
+    "whatsapp_node/src/index.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"

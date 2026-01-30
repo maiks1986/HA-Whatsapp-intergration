@@ -96,6 +96,33 @@ async function bootstrap() {
     });
 
     server.listen(5002, '0.0.0.0', () => console.log(`WhatsApp Pro Backend listening on port 5002`));
+
+    // Graceful Shutdown
+    const shutdown = async (signal: string) => {
+        console.log(`Received ${signal}. Shutting down gracefully...`);
+        
+        // Stop all instances
+        const instances = engineManager.getAllInstances();
+        for (const inst of instances) {
+            console.log(`Stopping Instance ${inst.id}...`);
+            await inst.close(); 
+        }
+
+        // Close Server
+        server.close(() => {
+            console.log('HTTP/Socket Server closed.');
+            process.exit(0);
+        });
+        
+        // Force exit if hanging
+        setTimeout(() => {
+            console.error('Force shutdown after timeout.');
+            process.exit(1);
+        }, 10000);
+    };
+
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
 }
 
 bootstrap().catch(err => console.error('Fatal bootstrap error:', err));

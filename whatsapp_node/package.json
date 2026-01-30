@@ -1,6 +1,6 @@
 {
   "name": "whatsapp-ha-engine",
-  "version": "1.9.1.0029",
+  "version": "1.9.1.0030",
   "description": "Browserless WhatsApp Engine for Home Assistant",
   "main": "dist/index.js",
   "scripts": {
