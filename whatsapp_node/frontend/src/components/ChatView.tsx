@@ -58,9 +58,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
     <div className="flex-1 flex flex-col relative shadow-2xl min-w-0">
       <header className="p-4 bg-slate-50 border-b flex justify-between items-center shadow-sm z-10">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-slate-300 rounded-full flex items-center justify-center shadow-inner text-slate-500 relative">
-            <CircleDot size={24} />
-            {selectedChat.ephemeral_mode === 1 && <div className="absolute -bottom-1 -right-1 bg-slate-800 text-white p-0.5 rounded-full border border-white"><Ghost size={10} /></div>}
+          <div className="w-10 h-10 bg-slate-300 rounded-full flex items-center justify-center shadow-inner text-slate-500 relative overflow-hidden">
+            {selectedChat.profile_picture ? (
+                <img src={`/media/${selectedChat.profile_picture}`} className="w-full h-full object-cover" alt="" />
+            ) : (
+                <CircleDot size={24} />
+            )}
+            {selectedChat.ephemeral_mode === 1 && <div className="absolute -bottom-1 -right-1 bg-slate-800 text-white p-0.5 rounded-full border border-white z-10"><Ghost size={10} /></div>}
           </div>
           <div>
             <h3 className="font-bold leading-tight text-slate-800 flex items-center gap-2">

@@ -73,8 +73,12 @@ export const ChatList: React.FC<ChatListProps> = ({
             onClick={() => setSelectedChat(chat)} 
             className={`p-4 flex items-center gap-3 cursor-pointer border-b border-slate-50 transition-all ${selectedChat?.jid === chat.jid ? 'bg-teal-50/50 border-l-4 border-l-teal-600' : 'hover:bg-slate-50'}`}
           >
-            <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center shrink-0 shadow-inner relative">
-              <User size={24} className="text-slate-400" />
+            <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center shrink-0 shadow-inner relative overflow-hidden">
+              {chat.profile_picture ? (
+                <img src={`/media/${chat.profile_picture}`} className="w-full h-full object-cover" alt="" />
+              ) : (
+                <User size={24} className="text-slate-400" />
+              )}
               {chat.is_pinned === 1 && <Pin size={10} className="absolute -top-1 -right-1 text-teal-600 rotate-45" />}
             </div>
             <div className="flex-1 overflow-hidden">

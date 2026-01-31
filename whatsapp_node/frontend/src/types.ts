@@ -25,6 +25,7 @@ export interface Chat {
     is_pinned: number;
     ephemeral_mode?: number;
     ephemeral_timer?: number;
+    profile_picture?: string | null;
 }
 
 export interface Message {

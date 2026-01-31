@@ -35,11 +35,17 @@ export const AccountStrip: React.FC<AccountStripProps> = ({
         <div 
           key={inst.id} 
           onClick={() => onSelectInstance(inst)} 
-          className={`w-12 h-12 rounded-2xl flex items-center justify-center cursor-pointer transition-all relative shadow-sm ${selectedInstance?.id === inst.id ? 'bg-teal-600 text-white scale-110 shadow-teal-600/20' : 'bg-white text-slate-400 hover:bg-slate-50'}`} 
+          className={`w-12 h-12 rounded-2xl flex items-center justify-center cursor-pointer transition-all relative shadow-sm overflow-hidden ${selectedInstance?.id === inst.id ? 'bg-teal-600 text-white scale-110 shadow-teal-600/20' : 'bg-white text-slate-400 hover:bg-slate-50'}`} 
           title={inst.name}
         >
-          <span className="font-black text-lg">{inst.name ? inst.name[0].toUpperCase() : '?'}</span>
-          <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${inst.status === 'connected' ? 'bg-green-500' : 'bg-slate-400'}`}></div>
+          {inst.id === 1 && inst.status === 'connected' ? ( // Logic: if it's the primary instance, we might want to show your own face?
+             // Actually, instances usually don't have their own profile pic synced yet.
+             // We'll keep the letter icon but add the connected status.
+             <span className="font-black text-lg">{inst.name ? inst.name[0].toUpperCase() : '?'}</span>
+          ) : (
+             <span className="font-black text-lg">{inst.name ? inst.name[0].toUpperCase() : '?'}</span>
+          )}
+          <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white z-10 ${inst.status === 'connected' ? 'bg-green-500' : 'bg-slate-400'}`}></div>
         </div>
       ))}
       
