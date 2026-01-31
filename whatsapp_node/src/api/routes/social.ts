@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../../db/database';
 import { engineManager } from '../../manager/EngineManager';
+import { aiService } from '../../services/AiService';
 import { requireAuth } from '../authMiddleware';
 
 export const socialRouter = () => {
@@ -45,6 +46,22 @@ export const socialRouter = () => {
         } else {
             res.status(404).json({ error: "Instance not found" });
         }
+    });
+
+    router.post('/social/nudge', requireAuth, async (req, res) => {
+        const { instanceId, jid, tone } = req.body;
+        const db = getDb();
+        
+        // 1. Get last few messages for context
+        const messages = db.prepare('SELECT * FROM messages WHERE instance_id = ? AND chat_jid = ? ORDER BY timestamp DESC LIMIT 5').all(instanceId, jid);
+        
+        // 2. Ask AI to generate a nudge
+        const prompt = tone === 'morning' 
+            ? "Generate a warm 'Good morning' message. Mention something relevant if you see it in the history, otherwise keep it simple and friendly. No quotes."
+            : "Generate a friendly 'How are you?' check-in message. No quotes.";
+            
+        const draft = await aiService.generateDraft(messages.reverse(), prompt);
+        res.json({ nudge: draft });
     });
 
     router.post('/groups/:instanceId', requireAuth, async (req, res) => {
