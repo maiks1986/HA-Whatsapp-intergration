@@ -26,6 +26,7 @@ const logger = pino({
   }
 });
 
+const app = express();
 const PORT = process.env.PORT || 5002;
 const config = loadConfig();
 
@@ -46,8 +47,11 @@ calendarManager.registerGoogleInstance(MAIN_INSTANCE_ID, authManager);
 
 // Log Last Fix Information
 try {
-  const lastFixes = JSON.parse(fs.readFileSync(path.join(__dirname, 'last_fixes.json'), 'utf8'));
-  logger.info(`[SYSTEM] Last Fix: ${lastFixes.description}`);
+  const lastFixesPath = path.join(__dirname, 'last_fixes.json');
+  if (fs.existsSync(lastFixesPath)) {
+    const lastFixes = JSON.parse(fs.readFileSync(lastFixesPath, 'utf8'));
+    logger.info(`[SYSTEM] Last Fix: ${lastFixes.description}`);
+  }
 } catch (err) {
   logger.warn('Could not load last_fixes.json');
 }
@@ -68,7 +72,7 @@ authManager.loadTokens().then(loaded => {
       is_active: true
     });
     // Initial sync
-    calendarManager.syncAll().catch((err: any) => logger.error('Initial sync failed', err));
+    calendarManager.syncAll().catch((err: any) => logger.error(err, 'Initial sync failed'));
   } else {
     logger.warn('No Google Calendar tokens found. Authentication required.');
   }
@@ -78,7 +82,7 @@ authManager.loadTokens().then(loaded => {
 app.get('/health', (req: Request, res: Response<HealthResponse>) => {
   res.json({ 
     status: 'ok', 
-    version: '1.0.0.0007',
+    version: '1.0.0.0008',
     authorized: authManager.isAuthorized()
   });
 });
@@ -113,11 +117,11 @@ app.post('/api/auth/token', async (req: Request, res: Response<TokenExchangeResp
       is_active: true
     });
 
-    calendarManager.syncAll().catch((err: any) => logger.error('Post-auth sync failed', err));
+    calendarManager.syncAll().catch((err: any) => logger.error(err, 'Post-auth sync failed'));
     
     res.json({ success: true });
   } catch (err: any) {
-    logger.error('Failed to exchange code', err);
+    logger.error(err, 'Failed to exchange code');
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -156,7 +160,7 @@ app.get('/api/calendar/events', async (req: Request, res: Response<CalendarEvent
 app.post('/api/calendar/sync', async (req: Request, res: Response<SyncResponse | { error: string }>) => {
   try {
     await calendarManager.syncAll();
-    res.json({ success: true, count: 0 }); // Count logic can be improved later
+    res.json({ success: true, count: 0 });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

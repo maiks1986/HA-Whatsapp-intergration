@@ -72,15 +72,15 @@ export class WhatsAppInstance {
     
             this.presence = initialPresence;
     
-            this.authPath = process.env.NODE_ENV === 'development'
+                            this.authPath = process.env.NODE_ENV === 'development'
     
-                ? path.join(__dirname, `../../auth_info_${id}`)
+                                ? path.join(__dirname, `../../auth_info_${id}`)
     
-                : `/data/auth_info_${id}`;
+                                : `/data/auth_info_${id}`;
     
-            this.logPath = process.env.NODE_ENV === 'development' ? path.join(__dirname, '../../raw_events.log') : '/data/raw_events.log';
+                            this.logPath = process.env.NODE_ENV === 'development' ? path.join(__dirname, '../../raw_events.log') : '/data/raw_events.log';
     
-            this.logger = pino({ level: this.debugEnabled ? 'debug' : 'info' });
+                            this.logger = pino({ level: this.debugEnabled ? 'debug' : 'info' });
     
             this.qrManager = new QRManager();
     
@@ -88,17 +88,27 @@ export class WhatsAppInstance {
     
             
     
-            console.log(`[WhatsAppInstance ${this.id}]: Log Path set to: ${this.logPath}`);
+                            console.log(`[WhatsAppInstance ${this.id}]: Log Path set to: ${this.logPath}`);
     
-            try {
+            
     
-                fs.appendFileSync(this.logPath, `[${new Date().toISOString()}] Instance ${this.id} initialized.\n`);
+                            try {
     
-            } catch (e) {
+            
     
-                console.error(`[WhatsAppInstance ${this.id}]: FAILED TO WRITE TO LOG FILE!`, e);
+                                fs.appendFileSync(this.logPath, `[${new Date().toISOString()}] Instance ${this.id} initialized.\n`);
     
-            }
+            
+    
+                            } catch (e) {
+    
+            
+    
+                                console.error(`[WhatsAppInstance ${this.id}]: FAILED TO WRITE TO LOG FILE!`, e);
+    
+            
+    
+                            }
     
         }
     
