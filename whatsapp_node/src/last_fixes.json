@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-01-31T02:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0041. Enabled Profile Picture display in the Frontend (ChatList, ChatView, and AccountStrip). Avatars are now pulled from the background sync service.",
+  "timestamp": "2026-01-31T03:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0042. Redesigned Login screen for a more professional look. Fixed Direct Login issues by refining the dynamic API base path logic to support Port 5002 access alongside Ingress and Native Panel modes.",
   "modules_affected": [
-    "whatsapp_node/frontend/src/components/Sidebar/ChatList.tsx",
-    "whatsapp_node/frontend/src/components/ChatView.tsx",
-    "whatsapp_node/frontend/src/components/Sidebar/AccountStrip.tsx",
+    "whatsapp_node/frontend/src/api/index.ts",
+    "whatsapp_node/frontend/src/Debug.tsx",
+    "whatsapp_node/frontend/src/components/Login.tsx",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"

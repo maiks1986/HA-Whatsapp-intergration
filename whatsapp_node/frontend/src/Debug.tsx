@@ -7,8 +7,10 @@ const socket = io();
 
 // Determine Base Path (Helper)
 const getBaseUrl = () => {
-  if (window.location.pathname.includes('hassio_ingress')) return 'api';
-  return '/api/whatsapp_proxy';
+  const path = window.location.pathname;
+  if (path.includes('hassio_ingress')) return 'api';
+  if (path.startsWith('/whatsapp')) return '/api/whatsapp_proxy';
+  return 'api';
 };
 
 const Debug = ({ onClose }: { onClose: () => void }) => {

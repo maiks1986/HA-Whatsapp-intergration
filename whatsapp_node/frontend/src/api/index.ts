@@ -11,10 +11,14 @@ import {
 
 // Determine Base Path
 const getBaseUrl = () => {
-  if (window.location.pathname.includes('hassio_ingress')) {
-    return 'api'; // Relative for Ingress
+  const path = window.location.pathname;
+  if (path.includes('hassio_ingress')) {
+    return 'api'; // Ingress (Relative)
   }
-  return '/api/whatsapp_proxy'; // Proxy for Native Component
+  if (path.startsWith('/whatsapp')) {
+    return '/api/whatsapp_proxy'; // HA Custom Panel (Absolute Proxy)
+  }
+  return 'api'; // Direct Access / Other (Relative)
 };
 
 const BASE = getBaseUrl();
