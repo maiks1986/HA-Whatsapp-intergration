@@ -52,23 +52,49 @@ export const systemRouter = () => {
         const user = (req as any).haUser;
         if (!user.isAdmin) return res.status(403).json({ error: "Admin only" });
         
-        // 1. Wipe volatile data
+        // 1. Capture current instances state
+        const activeInstances = engineManager.getAllInstances().map(inst => ({
+            id: inst.id,
+            name: inst.name,
+            presence: (inst as any).presence || 'unavailable'
+        }));
+
+        // 2. Stop all instances
+        for (const inst of activeInstances) {
+            await engineManager.stopInstance(inst.id);
+        }
+
+        // 3. Wipe volatile DB data
         db.prepare('DELETE FROM messages').run();
         db.prepare('DELETE FROM chats').run();
         db.prepare('DELETE FROM contacts').run();
         db.prepare('DELETE FROM reactions').run();
         db.prepare('DELETE FROM status_updates').run();
         
-        // 2. Clear avatars
+        // 4. Clear avatars
         const avatarDir = process.env.NODE_ENV === 'development' ? './media/avatars' : '/data/media/avatars';
         if (fs.existsSync(avatarDir)) {
             const files = fs.readdirSync(avatarDir);
             for (const file of files) fs.unlinkSync(path.join(avatarDir, file));
         }
 
-        // 3. Force Re-sync for all instances
-        for (const inst of engineManager.getAllInstances()) {
-            inst.reconnect();
+        // 5. Force Deep Re-sync (Soft wipe auth files except creds)
+        for (const instInfo of activeInstances) {
+            const authPath = process.env.NODE_ENV === 'development'
+                ? path.join(__dirname, `../../../auth_info_${instInfo.id}`)
+                : `/data/auth_info_${instInfo.id}`;
+            
+            if (fs.existsSync(authPath)) {
+                const files = fs.readdirSync(authPath);
+                for (const file of files) {
+                    if (file !== 'creds.json') {
+                        fs.rmSync(path.join(authPath, file), { recursive: true, force: true });
+                    }
+                }
+            }
+            
+            // 6. Restart instance
+            await engineManager.startInstance(instInfo.id, instInfo.name, instInfo.presence as any);
         }
         
         res.json({ success: true });

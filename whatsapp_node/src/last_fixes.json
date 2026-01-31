@@ -1,11 +1,9 @@
 {
-  "timestamp": "2026-01-31T12:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0051. Added 'Soft Repair' feature to clear local data (messages, chats, contacts, avatars) and force a fresh re-sync from WhatsApp servers without losing login sessions.",
+  "timestamp": "2026-01-31T13:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0052. Improved 'Soft Repair' feature to perform a deeper reset by wiping Baileys' internal sync state files (preserving login credentials). This tricks the library into sending a fresh 'messaging-history.set' dump, restoring all conversations and contacts after a database wipe.",
   "modules_affected": [
     "whatsapp_node/src/api/routes/system.ts",
-    "whatsapp_node/frontend/src/api/index.ts",
-    "whatsapp_node/frontend/src/App.tsx",
-    "whatsapp_node/frontend/src/components/Modals/SettingsModal.tsx",
+    "whatsapp_node/src/manager/WhatsAppInstance.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"

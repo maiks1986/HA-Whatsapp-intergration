@@ -529,6 +529,22 @@ export class WhatsAppInstance {
         if (fs.existsSync(this.authPath)) fs.rmSync(this.authPath, { recursive: true, force: true });
     }
 
+    async softWipeSyncState() {
+        if (!fs.existsSync(this.authPath)) return;
+        try {
+            const files = fs.readdirSync(this.authPath);
+            for (const file of files) {
+                if (file !== 'creds.json') {
+                    const fullPath = path.join(this.authPath, file);
+                    fs.rmSync(fullPath, { recursive: true, force: true });
+                }
+            }
+            console.log(`[Instance ${this.id}]: Soft-wiped sync state (preserved creds).`);
+        } catch (e) {
+            console.error(`[Instance ${this.id}]: Failed to soft-wipe sync state:`, e);
+        }
+    }
+
     async close() {
         this.workerManager?.stopAll();
         if (this.sock) { this.sock.end(undefined); this.sock = null; }
