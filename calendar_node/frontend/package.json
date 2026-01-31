@@ -1,7 +1,7 @@
 {
   "name": "calendar-master-frontend",
   "private": true,
-  "version": "1.0.0.0005",
+  "version": "1.0.0.0006",
   "type": "module",
   "scripts": {
     "dev": "vite",

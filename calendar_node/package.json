@@ -1,6 +1,6 @@
 {
   "name": "calendar-master",
-  "version": "1.0.0.0005",
+  "version": "1.0.0.0006",
   "description": "Google Calendar Master Add-on for Home Assistant Personal Secretary",
   "main": "dist/index.js",
   "scripts": {

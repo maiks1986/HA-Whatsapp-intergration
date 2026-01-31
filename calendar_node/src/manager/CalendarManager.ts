@@ -25,7 +25,7 @@ export class CalendarManager {
   }
 
   public async syncAll() {
-    const instances = this.db.getInstances();
+    const instances = this.db.getInstances() as any[];
     for (const inst of instances) {
       if (inst.type === 'google') {
         await this.syncGoogleInstance(inst.id);
@@ -33,6 +33,15 @@ export class CalendarManager {
         // TODO: Implement ICS Sync
       }
     }
+  }
+
+  public async listCalendars(instanceId: string) {
+    const auth = this.authManagers.get(instanceId);
+    if (!auth || !auth.isAuthorized()) return [];
+
+    const calendar = google.calendar({ version: 'v3', auth: auth.getClient() });
+    const res = await calendar.calendarList.list();
+    return res.data.items || [];
   }
 
   private async syncGoogleInstance(instanceId: string) {
@@ -73,9 +82,25 @@ export class CalendarManager {
     logger.info(`Synced ${events.length} events for instance ${instanceId}`);
   }
 
+  public async getAvailableSlots(start: string, end: string): Promise<CalendarEvent[]> {
+    const rawEvents = this.db.getEvents(start, end) as any[];
+    
+    return rawEvents.map((row: any) => ({
+      id: row.id,
+      calendar_id: row.calendar_id,
+      summary: row.summary,
+      description: row.description,
+      start_time: row.start_time,
+      end_time: row.end_time,
+      location: row.location,
+      status: row.status,
+    }));
+  }
+
   public async getAggregatedPresence() {
     const presenceCalendars = this.db.getCalendarsByRole('presence');
     // Combine events from all presence-mapped calendars to determine sensor state
+    return presenceCalendars;
   }
 
   // The "Adriana Shield" Logic

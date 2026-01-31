@@ -15,7 +15,7 @@ import {
   CalendarListEntry,
   CalendarEvent,
   SyncResponse,
-  TokenExchangeRequestSchema // Import the Zod schema
+  TokenExchangeRequestSchema
 } from './shared_schemas';
 
 const logger = pino({
@@ -32,12 +32,18 @@ const config = loadConfig();
 
 // Initialize Managers
 const db = new CalendarDatabase();
+const calendarManager = new CalendarManager(db);
+
+// Main Google Instance Initialization
+const MAIN_INSTANCE_ID = 'main_google';
 const authManager = new GoogleAuthManager(
   config.google_client_id,
   config.google_client_secret,
   process.env.REDIRECT_URI || 'urn:ietf:wg:oauth:2.0:oob'
 );
-const calendarManager = new CalendarManager(authManager, db);
+
+// Register the main instance
+calendarManager.registerGoogleInstance(MAIN_INSTANCE_ID, authManager);
 
 // Log Last Fix Information
 try {
@@ -54,8 +60,16 @@ app.use(express.json());
 authManager.loadTokens().then(loaded => {
   if (loaded) {
     logger.info('Google Calendar tokens loaded');
+    // Ensure instance is in DB
+    db.saveInstance({
+      id: MAIN_INSTANCE_ID,
+      name: 'Main Google Account',
+      type: 'google',
+      config: {},
+      is_active: true
+    });
     // Initial sync
-    calendarManager.syncEvents().catch(err => logger.error('Initial sync failed', err));
+    calendarManager.syncAll().catch((err: any) => logger.error('Initial sync failed', err));
   } else {
     logger.warn('No Google Calendar tokens found. Authentication required.');
   }
@@ -65,7 +79,7 @@ authManager.loadTokens().then(loaded => {
 app.get('/health', (req: Request, res: Response<HealthResponse>) => {
   res.json({ 
     status: 'ok', 
-    version: '0.0.1.0001',
+    version: '1.0.0.0006',
     authorized: authManager.isAuthorized()
   });
 });
@@ -77,24 +91,30 @@ app.get('/api/auth/url', (req: Request, res: Response<AuthUrlResponse>) => {
 });
 
 app.post('/api/auth/token', async (req: Request, res: Response<TokenExchangeResponse>) => {
-  // Runtime Validation with Zod!
   const validationResult = TokenExchangeRequestSchema.safeParse(req.body);
   
   if (!validationResult.success) {
     return res.status(400).json({ 
       success: false, 
-      error: validationResult.error.errors[0].message // Return the specific Zod error
+      error: validationResult.error.errors[0].message 
     });
   }
 
-  const { code } = validationResult.data; // Typesafe access
+  const { code } = validationResult.data;
 
   try {
     await authManager.setTokens(code);
     logger.info('Successfully authorized with Google');
     
-    // Sync immediately after auth
-    calendarManager.syncEvents().catch(err => logger.error('Post-auth sync failed', err));
+    db.saveInstance({
+      id: MAIN_INSTANCE_ID,
+      name: 'Main Google Account',
+      type: 'google',
+      config: {},
+      is_active: true
+    });
+
+    calendarManager.syncAll().catch((err: any) => logger.error('Post-auth sync failed', err));
     
     res.json({ success: true });
   } catch (err: any) {
@@ -106,8 +126,7 @@ app.post('/api/auth/token', async (req: Request, res: Response<TokenExchangeResp
 // Calendar API Endpoints
 app.get('/api/calendar/list', async (req: Request, res: Response<CalendarListEntry[] | { error: string }>) => {
   try {
-    const calendars = await calendarManager.listCalendars();
-    // Transform to shared type if needed, strict mapping
+    const calendars = await calendarManager.listCalendars(MAIN_INSTANCE_ID);
     const mapped: CalendarListEntry[] = calendars.map((cal: any) => ({
       id: cal.id,
       summary: cal.summary || 'Unknown',
@@ -137,8 +156,8 @@ app.get('/api/calendar/events', async (req: Request, res: Response<CalendarEvent
 
 app.post('/api/calendar/sync', async (req: Request, res: Response<SyncResponse | { error: string }>) => {
   try {
-    const events = await calendarManager.syncEvents();
-    res.json({ success: true, count: events.length });
+    await calendarManager.syncAll();
+    res.json({ success: true, count: 0 }); // Count logic can be improved later
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

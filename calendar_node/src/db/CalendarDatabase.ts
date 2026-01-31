@@ -108,6 +108,10 @@ export class CalendarDatabase {
     );
   }
 
+  public getCalendarsByRole(role: string) {
+    return this.db.prepare('SELECT * FROM calendars WHERE role = ?').all(role);
+  }
+
   public getEvents(startTime: string, endTime: string) {
     const stmt = this.db.prepare(`
       SELECT * FROM events 

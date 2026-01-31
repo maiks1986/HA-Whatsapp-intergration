@@ -1,8 +1,10 @@
 {
-  "timestamp": "2026-01-31T12:00:00.000Z",
-  "description": "v1.0.0.0005: Fixed 'z is not defined' error in shared_schemas.ts by restoring the zod import. Verified build locally.",
+  "timestamp": "2026-01-31T12:30:00.000Z",
+  "description": "v1.0.0.0006: Resolved architectural alignment issues. Fixed CalendarManager instantiation and method calls in index.ts. Added missing getCalendarsByRole method in Database and fixed type cast issues in manager.",
   "modules_affected": [
-    "calendar_node/src/shared_schemas.ts",
+    "calendar_node/src/index.ts",
+    "calendar_node/src/manager/CalendarManager.ts",
+    "calendar_node/src/db/CalendarDatabase.ts",
     "calendar_node/config.yaml"
   ]
 }
