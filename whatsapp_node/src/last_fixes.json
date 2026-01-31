@@ -1,8 +1,7 @@
 {
-  "timestamp": "2026-01-31T04:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0043. Fixed duplicate conversations in the UI by implementing a Unified Identity Resolver (mapping LIDs to Phone JIDs) and merging them using SQL GROUP BY logic.",
+  "timestamp": "2026-01-31T05:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0044. Fixed fragmented message history by unifying Phone JID and LID message streams in the UI.",
   "modules_affected": [
-    "whatsapp_node/src/manager/modules/MessageManager.ts",
     "whatsapp_node/src/api/routes/messaging.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",

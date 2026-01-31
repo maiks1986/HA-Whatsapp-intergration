@@ -56,7 +56,19 @@ export const messagingRouter = () => {
         const instanceData = db.prepare('SELECT ha_user_id FROM instances WHERE id = ?').get(instanceId) as Instance | undefined;
         if (!user.isAdmin && instanceData?.ha_user_id !== user.id) return res.status(403).json({ error: "Access Denied" });
 
-        const messages = db.prepare('SELECT * FROM messages WHERE instance_id = ? AND chat_jid = ? ORDER BY timestamp ASC').all(instanceId, jid) as any[];
+        // UNIFIED HISTORY: Fetch messages for BOTH the requested JID and its linked LID/Phone JID
+        const messages = db.prepare(`
+            SELECT m.* 
+            FROM messages m
+            WHERE m.instance_id = ? 
+              AND (
+                m.chat_jid = ? 
+                OR m.chat_jid = (SELECT lid FROM contacts WHERE jid = ? AND instance_id = ?)
+                OR m.chat_jid = (SELECT jid FROM contacts WHERE lid = ? AND instance_id = ?)
+              )
+            ORDER BY m.timestamp ASC
+        `).all(instanceId, jid, jid, instanceId, jid, instanceId) as any[];
+
         for (const msg of messages) {
             msg.reactions = db.prepare('SELECT sender_jid, emoji FROM reactions WHERE instance_id = ? AND message_whatsapp_id = ?').all(instanceId, msg.whatsapp_id);
         }
