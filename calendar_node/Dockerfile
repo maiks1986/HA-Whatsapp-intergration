@@ -31,5 +31,5 @@ RUN npm run build
 COPY --from=build-frontend /app/dist/public ./dist/public
 
 ENV NODE_ENV=production
-EXPOSE 5003
+EXPOSE 5002
 CMD ["npm", "start"]

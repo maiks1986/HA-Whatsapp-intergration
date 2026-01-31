@@ -1,5 +1,5 @@
 name: "Calendar Master"
-version: "1.0.0.0006"
+version: "1.0.0.0007"
 slug: "calendar_master"
 description: "Google Calendar Manager for Personal AI Secretary"
 arch:
@@ -19,9 +19,9 @@ schema:
   google_client_secret: str?
   debug_logging: bool?
 ingress: true
-ingress_port: 5003
+ingress_port: 5002
 ingress_entry: /
 panel_icon: mdi:calendar-check
 panel_title: Calendar Master
 ports:
-  5003/tcp: 5003
+  5002/tcp: 5002

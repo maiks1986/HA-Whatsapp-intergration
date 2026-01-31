@@ -1,10 +1,10 @@
 {
   "name": "calendar-master",
-  "version": "1.0.0.0006",
+  "version": "1.0.0.0007",
   "description": "Google Calendar Master Add-on for Home Assistant Personal Secretary",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc && node -e \"require('fs').copyFileSync('src/last_fixes.json', 'dist/last_fixes.json')\"",
+    "build": "tsc && node -e \"const fs=require('fs'); if(!fs.existsSync('dist')){fs.mkdirSync('dist')}; fs.copyFileSync('src/last_fixes.json', 'dist/last_fixes.json')\"",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts"
   },

@@ -1,10 +1,10 @@
 {
-  "timestamp": "2026-01-31T12:30:00.000Z",
-  "description": "v1.0.0.0006: Resolved architectural alignment issues. Fixed CalendarManager instantiation and method calls in index.ts. Added missing getCalendarsByRole method in Database and fixed type cast issues in manager.",
+  "timestamp": "2026-01-31T13:00:00.000Z",
+  "description": "v1.0.0.0007: Switched internal port to 5002 to match working WhatsApp Node pattern and resolve Ingress connection issues. Improved build script robustness.",
   "modules_affected": [
     "calendar_node/src/index.ts",
-    "calendar_node/src/manager/CalendarManager.ts",
-    "calendar_node/src/db/CalendarDatabase.ts",
-    "calendar_node/config.yaml"
+    "calendar_node/config.yaml",
+    "calendar_node/Dockerfile",
+    "calendar_node/package.json"
   ]
 }

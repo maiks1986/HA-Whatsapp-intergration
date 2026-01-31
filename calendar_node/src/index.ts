@@ -26,8 +26,7 @@ const logger = pino({
   }
 });
 
-const app = express();
-const PORT = process.env.PORT || 5003;
+const PORT = process.env.PORT || 5002;
 const config = loadConfig();
 
 // Initialize Managers
@@ -79,7 +78,7 @@ authManager.loadTokens().then(loaded => {
 app.get('/health', (req: Request, res: Response<HealthResponse>) => {
   res.json({ 
     status: 'ok', 
-    version: '1.0.0.0006',
+    version: '1.0.0.0007',
     authorized: authManager.isAuthorized()
   });
 });
