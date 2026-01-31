@@ -49,10 +49,13 @@ export class MessageManager {
                 const chatJids: string[] = [];
                 for (const chat of chats) {
                     if (chat.id.includes('@broadcast')) continue;
-                    chatJids.push(chat.id);
+                    
                     const normalized = normalizeJid(chat.id);
-                    const name = chat.name || this.resolveNameFromContacts(normalized);
-                    db.prepare('INSERT INTO chats (instance_id, jid, name, unread_count) VALUES (?, ?, ?, ?) ON CONFLICT(instance_id, jid) DO UPDATE SET name = CASE WHEN excluded.name IS NOT NULL AND excluded.name != \'\' THEN excluded.name ELSE chats.name END').run(this.instanceId, normalized, name, chat.unreadCount || 0);
+                    const jid = this.getCanonicalJid(normalized); // Canonicalize!
+                    chatJids.push(jid);
+
+                    const name = chat.name || this.resolveNameFromContacts(jid);
+                    db.prepare('INSERT INTO chats (instance_id, jid, name, unread_count) VALUES (?, ?, ?, ?) ON CONFLICT(instance_id, jid) DO UPDATE SET name = CASE WHEN excluded.name IS NOT NULL AND excluded.name != \'\' THEN excluded.name ELSE chats.name END').run(this.instanceId, jid, name, chat.unreadCount || 0);
                 }
                 if (this.profilePicCallback) this.profilePicCallback(chatJids);
             }
@@ -70,10 +73,12 @@ export class MessageManager {
         const db = getDb();
         const chatJids: string[] = [];
         for (const chat of chats) {
-            chatJids.push(chat.id);
             const normalized = normalizeJid(chat.id);
-            const name = chat.name || this.resolveNameFromContacts(normalized);
-            db.prepare('INSERT INTO chats (instance_id, jid, name, unread_count) VALUES (?, ?, ?, ?) ON CONFLICT(instance_id, jid) DO UPDATE SET name = excluded.name').run(this.instanceId, normalized, name, chat.unreadCount || 0);
+            const jid = this.getCanonicalJid(normalized); // Canonicalize!
+            chatJids.push(jid);
+
+            const name = chat.name || this.resolveNameFromContacts(jid);
+            db.prepare('INSERT INTO chats (instance_id, jid, name, unread_count) VALUES (?, ?, ?, ?) ON CONFLICT(instance_id, jid) DO UPDATE SET name = excluded.name').run(this.instanceId, jid, name, chat.unreadCount || 0);
         }
         this.io.emit('chat_update', { instanceId: this.instanceId });
         if (this.profilePicCallback) this.profilePicCallback(chatJids);
@@ -143,17 +148,26 @@ export class MessageManager {
         return contact?.name || jid.split('@')[0];
     }
 
+    private getCanonicalJid(jid: string): string {
+        if (!jid.endsWith('@lid')) return jid;
+        const db = getDb();
+        // Try to find the Phone JID associated with this LID
+        const contact = db.prepare('SELECT jid FROM contacts WHERE instance_id = ? AND lid = ?').get(this.instanceId, jid) as any;
+        return contact?.jid || jid;
+    }
+
     async saveMessageToDb(m: WAMessage) {
         try {
             const message = m.message;
             if (!message) return;
 
             const db = getDb();
-            const jid = normalizeJid(m.key.remoteJid!);
+            const rawJid = normalizeJid(m.key.remoteJid!);
+            const jid = this.getCanonicalJid(rawJid); // Canonicalize!
             const whatsapp_id = m.key.id || `fallback_${Date.now()}_${Math.random()}`;
             const timestamp = new Date(Number(m.messageTimestamp) * 1000).toISOString();
             const is_from_me = m.key.fromMe ? 1 : 0;
-            const sender_jid = m.key.participant ? normalizeJid(m.key.participant) : jid;
+            const sender_jid = m.key.participant ? normalizeJid(m.key.participant) : rawJid;
 
             // SENDER NAME RESOLUTION & AUTO-LEARN
             let senderName = m.pushName;
@@ -176,7 +190,7 @@ export class MessageManager {
             // IDENTITY RESOLUTION: The Chat identity should always be the contact name (1-on-1) or group subject.
             let chatIdentityName = this.resolveNameFromContacts(jid);
 
-            if (jid === 'status@broadcast') {
+            if (rawJid === 'status@broadcast') {
                 await this.handleStatusUpdate(m);
                 return;
             }

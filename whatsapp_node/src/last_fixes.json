@@ -1,10 +1,9 @@
 {
-  "timestamp": "2026-01-31T03:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0042. Redesigned Login screen for a more professional look. Fixed Direct Login issues by refining the dynamic API base path logic to support Port 5002 access alongside Ingress and Native Panel modes.",
+  "timestamp": "2026-01-31T04:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0043. Fixed duplicate conversations in the UI by implementing a Unified Identity Resolver (mapping LIDs to Phone JIDs) and merging them using SQL GROUP BY logic.",
   "modules_affected": [
-    "whatsapp_node/frontend/src/api/index.ts",
-    "whatsapp_node/frontend/src/Debug.tsx",
-    "whatsapp_node/frontend/src/components/Login.tsx",
+    "whatsapp_node/src/manager/modules/MessageManager.ts",
+    "whatsapp_node/src/api/routes/messaging.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"

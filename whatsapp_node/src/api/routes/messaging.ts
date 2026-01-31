@@ -19,20 +19,21 @@ export const messagingRouter = () => {
             SELECT 
                 c.jid, 
                 COALESCE(co.name, c.name, c.jid) as name, 
-                c.unread_count, 
-                c.last_message_text, 
-                c.last_message_timestamp,
-                c.is_archived,
-                c.is_pinned,
-                c.ephemeral_mode,
-                c.ephemeral_timer,
+                SUM(c.unread_count) as unread_count, 
+                MAX(c.last_message_text) as last_message_text, 
+                MAX(c.last_message_timestamp) as last_message_timestamp,
+                MAX(c.is_archived) as is_archived,
+                MAX(c.is_pinned) as is_pinned,
+                MAX(c.ephemeral_mode) as ephemeral_mode,
+                MAX(c.ephemeral_timer) as ephemeral_timer,
                 COALESCE(c.profile_picture, co.profile_picture) as profile_picture
             FROM chats c
             LEFT JOIN contacts co ON c.jid = co.jid AND c.instance_id = co.instance_id
             WHERE c.instance_id = ? 
               AND c.jid NOT LIKE '%@broadcast'
               AND (c.last_message_timestamp IS NOT NULL OR c.is_pinned = 1 OR c.unread_count > 0)
-            ORDER BY c.is_pinned DESC, c.last_message_timestamp DESC
+            GROUP BY COALESCE(co.lid, c.jid)
+            ORDER BY MAX(c.is_pinned) DESC, MAX(c.last_message_timestamp) DESC
         `).all(instanceId) as Chat[];
         res.json(chats);
     });
