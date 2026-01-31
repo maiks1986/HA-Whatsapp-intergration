@@ -1,0 +1,27 @@
+name: "Calendar Master"
+version: "0.0.1.0001"
+slug: "calendar_master"
+description: "Google Calendar Manager for Personal AI Secretary"
+arch:
+  - aarch64
+  - amd64
+  - armv7
+startup: application
+boot: auto
+map:
+  - config:rw
+options:
+  google_client_id: ""
+  google_client_secret: ""
+  debug_logging: false
+schema:
+  google_client_id: str?
+  google_client_secret: str?
+  debug_logging: bool?
+ingress: true
+ingress_port: 5003
+ingress_entry: /
+panel_icon: mdi:calendar-check
+panel_title: Calendar Master
+ports:
+  5003/tcp: 5003

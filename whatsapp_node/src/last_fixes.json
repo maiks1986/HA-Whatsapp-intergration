@@ -1,9 +1,10 @@
 {
-  "timestamp": "2026-01-30T23:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0038. Changed API Key priority: Database settings (Runtime) now take precedence over Home Assistant Options (Static). This allows changing the key via the UI without restarting the container.",
+  "timestamp": "2026-01-31T00:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0039. Prepared engine for Native HA Integration support by adding 'internal_api_key' authentication method.",
   "modules_affected": [
-    "whatsapp_node/src/services/AiService.ts",
     "whatsapp_node/config.yaml",
+    "whatsapp_node/src/api/authMiddleware.ts",
+    "whatsapp_node/src/types.ts",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"
   ]

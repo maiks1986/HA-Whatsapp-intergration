@@ -18,6 +18,13 @@ export const identityResolver = (req: Request, res: Response, next: NextFunction
         return next();
     }
 
+    // 1. API Key Auth (Native Integration)
+    const apiKey = req.headers['x-api-key'] as string;
+    if (apiKey && options.internal_api_key && apiKey === options.internal_api_key) {
+        (req as any).haUser = { id: 'ha_component', isAdmin: true, source: 'api_key' } as AuthUser;
+        return next();
+    }
+
     const userId = req.headers['x-hass-user-id'] as string;
     const ingressPath = req.headers['x-ingress-path'] as string;
     const isAdmin = req.headers['x-hass-is-admin'] === '1' || req.headers['x-hass-is-admin'] === 'true';
