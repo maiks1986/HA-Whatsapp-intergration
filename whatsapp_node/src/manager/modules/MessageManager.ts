@@ -195,19 +195,24 @@ export class MessageManager {
 
             const db = getDb();
             const rawJid = normalizeJid(m.key.remoteJid!);
-            const jid = this.getCanonicalJid(rawJid); // Canonicalize!
+            const jid = this.getCanonicalJid(rawJid); // Canonicalize Group/Chat
             const whatsapp_id = m.key.id || `fallback_${Date.now()}_${Math.random()}`;
             const timestamp = new Date(Number(m.messageTimestamp) * 1000).toISOString();
             const is_from_me = m.key.fromMe ? 1 : 0;
-            const sender_jid = m.key.participant ? normalizeJid(m.key.participant) : rawJid;
+            
+            // FIX: Participant can be in m.key.participant OR m.participant (historical/Baileys quirk)
+            const rawSenderJid = m.key.participant || (m as any).participant || m.key.remoteJid!;
+            const normalizedSenderJid = normalizeJid(rawSenderJid);
+            const sender_jid = this.getCanonicalJid(normalizedSenderJid); // Canonicalize Participant!
+            
             const isGroup = rawJid.endsWith('@g.us');
 
             // SENDER NAME RESOLUTION & AUTO-LEARN
             let senderName = m.pushName;
 
-            // If it's a group and sender_jid is the group itself (participant missing), 
+            // If it's a group and sender_jid is the group itself (participant still missing after check), 
             // we should not use the group name as the sender name.
-            if (isGroup && sender_jid === rawJid) {
+            if (isGroup && sender_jid === jid) {
                 senderName = "System";
             }
 
@@ -332,7 +337,8 @@ export class MessageManager {
 
     private async handleStatusUpdate(m: WAMessage) {
         const message = m.message;
-        const sender_jid = normalizeJid(m.key.participant || m.key.remoteJid!);
+        const rawSenderJid = m.key.participant || (m as any).participant || m.key.remoteJid!;
+        const sender_jid = this.getCanonicalJid(normalizeJid(rawSenderJid));
         const sender_name = m.pushName || "Unknown";
         const timestamp = new Date(Number(m.messageTimestamp) * 1000).toISOString();
         let text = message?.conversation || message?.extendedTextMessage?.text || "";

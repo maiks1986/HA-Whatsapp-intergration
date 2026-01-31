@@ -1,9 +1,8 @@
 {
-  "timestamp": "2026-01-31T09:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0048. Fixed Group Message attribution: Ensured participant names are correctly resolved and not overwritten by the group name. Added background cleanup to repair incorrect sender names in existing group messages.",
+  "timestamp": "2026-01-31T10:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0049. Fixed Group Message and Status attribution by checking for participants at both the key and message levels. Enabled identity canonicalization for senders to ensure LID participants map to their Phone Names.",
   "modules_affected": [
     "whatsapp_node/src/manager/modules/MessageManager.ts",
-    "whatsapp_node/src/manager/modules/WorkerManager.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"
