@@ -1,5 +1,32 @@
 import { z } from 'zod';
 
+// --- Roles and Types ---
+
+export const CalendarRoleSchema = z.enum([
+  'primary',        // Main appointments
+  'private',        // Private appointments (blocks time, hidden details)
+  'fixed',          // Recurring/Routine (Vaste Afspraken)
+  'presence',       // Drives HA sensors (Justin Thuis/School)
+  'social_slots',   // Shared availability (Adriana)
+  'external',       // Read-only feeds (School Holidays)
+  'ignore'          // Specifically excluded
+]);
+export type CalendarRole = z.infer<typeof CalendarRoleSchema>;
+
+export const InstanceTypeSchema = z.enum(['google', 'ics']);
+export type InstanceType = z.infer<typeof InstanceTypeSchema>;
+
+// --- Instance Schemas ---
+
+export const InstanceSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  type: InstanceTypeSchema,
+  config: z.any(), // JSON config for OAuth or ICS URL
+  is_active: z.boolean(),
+});
+export type Instance = z.infer<typeof InstanceSchema>;
+
 // --- Core Response Schemas ---
 
 export const HealthResponseSchema = z.object({

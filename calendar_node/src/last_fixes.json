@@ -1,9 +1,8 @@
 {
-  "timestamp": "2026-01-31T11:45:00.000Z",
-  "description": "v1.0.0.0004: Fixed missing event sync logic in CalendarManager and updated Database schema to correctly handle instance_id mapping for events. Verified frontend build locally.",
+  "timestamp": "2026-01-31T12:00:00.000Z",
+  "description": "v1.0.0.0005: Fixed 'z is not defined' error in shared_schemas.ts by restoring the zod import. Verified build locally.",
   "modules_affected": [
-    "calendar_node/src/db/CalendarDatabase.ts",
-    "calendar_node/src/manager/CalendarManager.ts",
+    "calendar_node/src/shared_schemas.ts",
     "calendar_node/config.yaml"
   ]
 }

@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 // --- Roles and Types ---
 
 export const CalendarRoleSchema = z.enum([
@@ -26,7 +28,6 @@ export const InstanceSchema = z.object({
 export type Instance = z.infer<typeof InstanceSchema>;
 
 // --- Core Response Schemas ---
-// ... (rest of the schemas)
 
 export const HealthResponseSchema = z.object({
   status: z.enum(['ok', 'error', 'loading']),
