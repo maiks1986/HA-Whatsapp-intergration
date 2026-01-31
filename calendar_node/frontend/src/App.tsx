@@ -6,7 +6,7 @@ import {
   AuthUrlResponse, 
   TokenExchangeResponse, 
   TokenExchangeRequest 
-} from './types/shared_types'
+} from './types/shared_schemas'
 
 function App() {
   const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading')

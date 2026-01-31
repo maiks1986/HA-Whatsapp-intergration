@@ -1,7 +1,7 @@
 import { google } from 'googleapis';
 import { GoogleAuthManager } from './GoogleAuthManager';
 import { CalendarDatabase } from '../db/CalendarDatabase';
-import { CalendarEvent } from '../shared_types';
+import { CalendarEvent } from '../shared_schemas';
 import pino from 'pino';
 
 const logger = pino({

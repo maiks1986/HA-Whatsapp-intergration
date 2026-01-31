@@ -9,10 +9,10 @@ COPY frontend/src ./src
 # Create types directory
 RUN mkdir -p ./src/types
 
-# COPY shared types from parent context. 
+# COPY shared schemas from parent context. 
 # NOTE: The build context for this Dockerfile is the `calendar_node` directory, 
-# so we can access `src/shared_types.ts`.
-COPY src/shared_types.ts ./src/types/shared_types.ts
+# so we can access `src/shared_schemas.ts`.
+COPY src/shared_schemas.ts ./src/types/shared_schemas.ts
 
 RUN npm install && npm run build
 

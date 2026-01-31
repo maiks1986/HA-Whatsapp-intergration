@@ -5,6 +5,12 @@ import { Terminal, X, Pause, Play, History } from 'lucide-react';
 
 const socket = io();
 
+// Determine Base Path (Helper)
+const getBaseUrl = () => {
+  if (window.location.pathname.includes('hassio_ingress')) return 'api';
+  return '/api/whatsapp_proxy';
+};
+
 const Debug = ({ onClose }: { onClose: () => void }) => {
     const [activeTab, setActiveTab] = useState<'events' | 'database'>('events');
     const [events, setEvents] = useState<any[]>([]);
@@ -18,11 +24,12 @@ const Debug = ({ onClose }: { onClose: () => void }) => {
     const [dbOffset, setDbOffset] = useState(0);
 
     const scrollRef = useRef<HTMLDivElement>(null);
+    const BASE = getBaseUrl();
 
     const fetchHistory = async () => {
         setIsLoading(true);
         try {
-            const res = await axios.get(`api/debug/raw_logs?limit=${lineLimit}`);
+            const res = await axios.get(`${BASE}/debug/raw_logs?limit=${lineLimit}`);
             setEvents(res.data.map((log: any) => ({
                 id: Math.random(),
                 timestamp: new Date(log.timestamp).toLocaleTimeString(),
@@ -36,7 +43,7 @@ const Debug = ({ onClose }: { onClose: () => void }) => {
         setIsLoading(true);
         const newOffset = reset ? 0 : dbOffset;
         try {
-            const res = await axios.get(`api/debug/db/${dbTable}?limit=50&offset=${newOffset}`);
+            const res = await axios.get(`${BASE}/debug/db/${dbTable}?limit=50&offset=${newOffset}`);
             setDbData(res.data);
             if (reset) setDbOffset(0);
         } catch (e) { alert("Failed to fetch DB data"); } finally { setIsLoading(false); }

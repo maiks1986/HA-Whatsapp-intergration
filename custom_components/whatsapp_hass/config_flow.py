@@ -22,25 +22,21 @@ class WhatsAppConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_show_form(
                 step_id="user",
                 data_schema=vol.Schema({
-                    vol.Required("name", description="A unique name for this WhatsApp account"): str,
-                    vol.Optional("web_ui_url", default="http://localhost:5001", description="URL of the Web UI (e.g. http://192.168.1.10:5001)"): str,
-                    vol.Optional("monitor_only", default=False, description="Silent Monitor Mode (Download only)"): bool,
+                    vol.Required("engine_host", default="a0d7b954-whatsapp-node-engine"): str,
+                    vol.Required("engine_port", default=5002): int,
+                    vol.Required("api_key", description="Internal API Key from Add-on Config"): str,
                 }),
             )
 
-        self.account_name = user_input["name"]
-        self.web_ui_url = user_input.get("web_ui_url", "http://localhost:5001")
-        self.monitor_only = user_input.get("monitor_only", False)
-        
-        await self.async_set_unique_id(self.account_name)
+        await self.async_set_unique_id("whatsapp_engine")
         self._abort_if_unique_id_configured()
 
         return self.async_create_entry(
-            title=self.account_name, 
+            title="WhatsApp Engine", 
             data={
-                "name": self.account_name, 
-                "monitor_only": self.monitor_only,
-                "web_ui_url": self.web_ui_url
+                "engine_host": user_input["engine_host"],
+                "engine_port": user_input["engine_port"],
+                "api_key": user_input["api_key"]
             }
         )
 

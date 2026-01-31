@@ -14,8 +14,9 @@ import {
   TokenExchangeResponse,
   CalendarListEntry,
   CalendarEvent,
-  SyncResponse
-} from './shared_types';
+  SyncResponse,
+  TokenExchangeRequestSchema // Import the Zod schema
+} from './shared_schemas';
 
 const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
@@ -67,9 +68,18 @@ app.get('/api/auth/url', (req: Request, res: Response<AuthUrlResponse>) => {
   res.json({ url });
 });
 
-app.post('/api/auth/token', async (req: Request<{}, {}, TokenExchangeRequest>, res: Response<TokenExchangeResponse>) => {
-  const { code } = req.body;
-  if (!code) return res.status(400).json({ success: false, error: 'Code is required' });
+app.post('/api/auth/token', async (req: Request, res: Response<TokenExchangeResponse>) => {
+  // Runtime Validation with Zod!
+  const validationResult = TokenExchangeRequestSchema.safeParse(req.body);
+  
+  if (!validationResult.success) {
+    return res.status(400).json({ 
+      success: false, 
+      error: validationResult.error.errors[0].message // Return the specific Zod error
+    });
+  }
+
+  const { code } = validationResult.data; // Typesafe access
 
   try {
     await authManager.setTokens(code);

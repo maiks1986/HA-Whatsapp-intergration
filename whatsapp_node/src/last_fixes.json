@@ -1,10 +1,12 @@
 {
-  "timestamp": "2026-01-31T00:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0039. Prepared engine for Native HA Integration support by adding 'internal_api_key' authentication method.",
+  "timestamp": "2026-01-31T01:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0040. Implemented Native Home Assistant Integration logic (custom_components/whatsapp_hass) and updated Frontend to support dynamic API routing (Ingress vs Native Proxy).",
   "modules_affected": [
+    "whatsapp_node/frontend/src/api/index.ts",
+    "whatsapp_node/frontend/src/Debug.tsx",
+    "custom_components/whatsapp_hass/__init__.py",
+    "custom_components/whatsapp_hass/config_flow.py",
     "whatsapp_node/config.yaml",
-    "whatsapp_node/src/api/authMiddleware.ts",
-    "whatsapp_node/src/types.ts",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"
   ]
