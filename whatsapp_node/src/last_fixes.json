@@ -1,8 +1,12 @@
 {
-  "timestamp": "2026-01-30T18:00:00.000Z",
-  "description": "Bumped version to 1.9.1.0033. Fixed missing contact names by making contact sync aggressive (saving contacts without names) and implementing auto-learning from incoming messages.",
+  "timestamp": "2026-01-30T19:00:00.000Z",
+  "description": "Bumped version to 1.9.1.0034. Added Profile Picture Worker to automatically fetch and cache contact/group images in the background.",
   "modules_affected": [
+    "whatsapp_node/src/manager/modules/ProfilePictureManager.ts",
+    "whatsapp_node/src/manager/WhatsAppInstance.ts",
     "whatsapp_node/src/manager/modules/MessageManager.ts",
+    "whatsapp_node/src/api/routes/messaging.ts",
+    "whatsapp_node/src/db/database.ts",
     "whatsapp_node/config.yaml",
     "whatsapp_node/package.json",
     "whatsapp_node/src/last_fixes.json"

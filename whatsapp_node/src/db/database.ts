@@ -179,6 +179,11 @@ export function initDatabase() {
     ensureSetting('ephemeral_trigger_start', '👻');
     ensureSetting('ephemeral_trigger_stop', '🛑');
 
+    // Profile Picture Migrations
+    ensureColumn('chats', 'profile_picture', 'TEXT');
+    ensureColumn('chats', 'profile_picture_timestamp', 'DATETIME');
+    ensureColumn('contacts', 'profile_picture_timestamp', 'DATETIME');
+
     console.log('DATABASE: Initialization and Migrations complete.');
 }
 

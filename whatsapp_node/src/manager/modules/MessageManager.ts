@@ -5,7 +5,13 @@ import path from 'path';
 import fs from 'fs';
 
 export class MessageManager {
-    constructor(private instanceId: number, private sock: WASocket, private io: any, private logger: any) {}
+    constructor(
+        private instanceId: number, 
+        private sock: WASocket, 
+        private io: any, 
+        private logger: any,
+        private profilePicCallback?: (jids: string[]) => void
+    ) {}
 
     // --- MASS SYNC HANDLERS ---
 
@@ -17,8 +23,10 @@ export class MessageManager {
         db.transaction(() => {
             // 1. Save all contacts
             if (contacts) {
+                const contactJids: string[] = [];
                 for (const contact of contacts) {
                     if (contact.id.includes('@broadcast')) continue;
+                    contactJids.push(contact.id);
                     
                     const id = contact.id;
                     const normalized = normalizeJid(id);
@@ -34,15 +42,19 @@ export class MessageManager {
                         lid = COALESCE(excluded.lid, contacts.lid)
                     `).run(this.instanceId, normalized, name, lid);
                 }
+                if (this.profilePicCallback) this.profilePicCallback(contactJids);
             }
             // 2. Save all chats
             if (chats) {
+                const chatJids: string[] = [];
                 for (const chat of chats) {
                     if (chat.id.includes('@broadcast')) continue;
+                    chatJids.push(chat.id);
                     const normalized = normalizeJid(chat.id);
                     const name = chat.name || this.resolveNameFromContacts(normalized);
                     db.prepare('INSERT INTO chats (instance_id, jid, name, unread_count) VALUES (?, ?, ?, ?) ON CONFLICT(instance_id, jid) DO UPDATE SET name = CASE WHEN excluded.name IS NOT NULL AND excluded.name != \'\' THEN excluded.name ELSE chats.name END').run(this.instanceId, normalized, name, chat.unreadCount || 0);
                 }
+                if (this.profilePicCallback) this.profilePicCallback(chatJids);
             }
         })();
 
@@ -56,12 +68,15 @@ export class MessageManager {
 
     async handleChatsUpsert(chats: BaileysChat[]) {
         const db = getDb();
+        const chatJids: string[] = [];
         for (const chat of chats) {
+            chatJids.push(chat.id);
             const normalized = normalizeJid(chat.id);
             const name = chat.name || this.resolveNameFromContacts(normalized);
             db.prepare('INSERT INTO chats (instance_id, jid, name, unread_count) VALUES (?, ?, ?, ?) ON CONFLICT(instance_id, jid) DO UPDATE SET name = excluded.name').run(this.instanceId, normalized, name, chat.unreadCount || 0);
         }
         this.io.emit('chat_update', { instanceId: this.instanceId });
+        if (this.profilePicCallback) this.profilePicCallback(chatJids);
     }
 
     async handleChatsUpdate(updates: Partial<BaileysChat>[]) {
@@ -77,19 +92,29 @@ export class MessageManager {
 
     async handleContactsUpsert(contacts: Contact[]) {
         const db = getDb();
+        console.log(`[Contacts Upsert ${this.instanceId}]: Received ${contacts.length} contacts`);
+        if (contacts.length > 0) console.log(`[Contacts Upsert] Sample:`, JSON.stringify(contacts[0]));
+
+        const contactJids: string[] = [];
         for (const contact of contacts) {
-            const normalized = normalizeJid(contact.id);
-            const name = contact.name || contact.notify || contact.verifiedName || null;
-            const lid = (contact as any).lid || (contact.id.includes('@lid') ? contact.id : null);
+            contactJids.push(contact.id);
+            let id = contact.id;
+            const lid = (contact as any).lid || (id.includes('@lid') ? id : null);
             
-            db.prepare(`
-                INSERT INTO contacts (instance_id, jid, name, lid) 
-                VALUES (?, ?, ?, ?) 
-                ON CONFLICT(instance_id, jid) DO UPDATE SET 
-                name = CASE WHEN excluded.name IS NOT NULL THEN excluded.name ELSE contacts.name END,
-                lid = COALESCE(excluded.lid, contacts.lid)
-            `).run(this.instanceId, normalized, name, lid);
+            const normalized = normalizeJid(id);
+            const name = contact.name || contact.notify || contact.verifiedName;
+            
+            if (name) {
+                 db.prepare(`
+                    INSERT INTO contacts (instance_id, jid, name, lid) 
+                    VALUES (?, ?, ?, ?) 
+                    ON CONFLICT(instance_id, jid) DO UPDATE SET 
+                    name = excluded.name,
+                    lid = COALESCE(excluded.lid, contacts.lid)
+                `).run(this.instanceId, normalized, name, lid);
+            }
         }
+        if (this.profilePicCallback) this.profilePicCallback(contactJids);
     }
 
     async handleContactsUpdate(updates: Partial<Contact>[]) {

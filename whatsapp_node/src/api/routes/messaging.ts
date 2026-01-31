@@ -25,7 +25,8 @@ export const messagingRouter = () => {
                 c.is_archived,
                 c.is_pinned,
                 c.ephemeral_mode,
-                c.ephemeral_timer
+                c.ephemeral_timer,
+                COALESCE(c.profile_picture, co.profile_picture) as profile_picture
             FROM chats c
             LEFT JOIN contacts co ON c.jid = co.jid AND c.instance_id = co.instance_id
             WHERE c.instance_id = ? 
@@ -42,7 +43,8 @@ export const messagingRouter = () => {
         const instanceData = db.prepare('SELECT ha_user_id FROM instances WHERE id = ?').get(instanceId) as any;
         if (!user.isAdmin && instanceData?.ha_user_id !== user.id) return res.status(403).json({ error: "Access Denied" });
 
-        const contacts = db.prepare('SELECT * FROM contacts WHERE instance_id = ? ORDER BY name ASC').all(instanceId);
+        // Explicitly select columns or * is fine if we added it
+        const contacts = db.prepare('SELECT instance_id, jid, name, lid, profile_picture FROM contacts WHERE instance_id = ? ORDER BY name ASC').all(instanceId);
         res.json(contacts);
     });
 

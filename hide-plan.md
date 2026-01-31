@@ -1,75 +1,77 @@
-# Plan: Stealth Mode Scheduler
+# Plan: Profile Picture Worker (Queue-Based)
 
-## Overview
-Allows users to schedule privacy changes (Online/Last Seen visibility) based on time and day.
+## Objective
+Automatically fetch and store profile pictures for all contacts and groups after the initial sync is complete.
 
----
+## 1. Architecture
 
-## Option A: "Specific People" (Granular Control)
-**Goal:** Hide status from *only* selected contacts (e.g., Boss) during specific hours, while remaining visible to others.
+### Database Changes
+*   `contacts`: Column `profile_picture` (TEXT) already exists (added in `.0008` migration).
+*   `chats`: Column `profile_picture` (TEXT) - Need to add this if we want group icons.
 
-### Mechanism
-1.  WhatsApp has a privacy setting: `lastSeen: "contact_blacklist"` (My Contacts Except...).
-2.  **The Challenge:** There is no simple Baileys function like `addToPrivacyExclusionList()`. We must construct a raw XML IQ stanza to send to the WhatsApp servers to update this specific list.
-3.  **Workflow:**
-    *   **Start Time:**
-        1.  Fetch current exclusion list (if possible) or maintain a local list.
-        2.  Add the "Stealth Targets" to this list.
-        3.  Send XML to update the list on WA servers.
-        4.  Call `sock.updatePrivacySetting('lastSeen', 'contact_blacklist')`.
-        5.  Call `sock.updatePrivacySetting('online', 'match_last_seen')`.
-    *   **End Time:**
-        1.  Remove "Stealth Targets" from the list.
-        2.  Send XML update.
-        3.  (Optional) Revert privacy setting if the list is empty.
+### Backend Logic (`whatsapp_node`)
+1.  **Module:** `ProfilePictureManager.ts`
+    *   **Queue System:** A simple array or Set of JIDs to process.
+    *   **Worker Loop:** Runs every X seconds (e.g., 2s) to process 1 item from the queue.
+    *   **Rate Limiting:** Ensure we don't call `sock.profilePictureUrl` too fast.
+    *   **Prioritization:**
+        *   Priority 1: Active chats (from `chats` table).
+        *   Priority 2: Contacts with missing pictures.
 
-### Pros & Cons
-*   **Pro:** Exact control. Doesn't hide you from friends/family.
-*   **Con:** High technical risk. Requires using undocumented/internal protocol features (IQ nodes). If WhatsApp changes the protocol node structure, this breaks immediately.
+2.  **Triggers:**
+    *   **Initial Sync Complete:** When `messaging-history.set` finishes or `connection.update` is open, enqueue all known contacts/chats.
+    *   **New Contact/Chat:** `contacts.upsert` / `chats.upsert` -> Enqueue immediately.
+    *   **Missing Picture:** If UI requests a picture and it's missing, maybe enqueue it? (Backend driven is safer).
 
----
+3.  **Storage:**
+    *   Fetch URL -> Download Image -> Save to `/data/media/avatars/`.
+    *   Update DB with local path (or URL if we just want to cache the link, but local is better for privacy/offline).
+    *   *Correction:* Saving thousands of images might bloat storage. Storing the *URL* is easier but URLs expire. Storing the *File* is robust.
+    *   **Decision:** Store the **File**.
+    *   **Path:** `/data/media/avatars/<jid>.jpg`.
 
-## Option B: "Global Toggle" (Reliable Control)
-**Goal:** Hide status from *Everyone* (or set to "My Contacts") during specific hours.
+### Implementation Details (`ProfilePictureManager.ts`)
+```typescript
+export class ProfilePictureManager {
+    private queue: string[] = [];
+    private processing = false;
 
-### Mechanism
-1.  Uses standard, supported Baileys APIs: `sock.updatePrivacySetting()`.
-2.  **Workflow:**
-    *   **Start Time:**
-        *   Call `sock.updatePrivacySetting('lastSeen', 'none')` (Nobody).
-        *   Call `sock.updatePrivacySetting('online', 'match_last_seen')`.
-    *   **End Time:**
-        *   Call `sock.updatePrivacySetting('lastSeen', 'all')` (Everyone) OR `'contacts'` (My Contacts).
+    // ... init ...
 
-### Pros & Cons
-*   **Pro:** Extremely reliable. Supported by official library methods. Unlikely to break.
-*   **Con:** It's "All or Nothing". You hide from your spouse at the same time you hide from your boss.
+    public enqueue(jids: string[]) {
+        // Add unique JIDs to queue
+    }
 
----
+    private async processQueue() {
+        if (this.queue.length === 0) return;
+        const jid = this.queue.shift();
+        
+        try {
+            const url = await this.sock.profilePictureUrl(jid, 'image'); // 'image' = high res, 'preview' = low
+            // Download and save
+            // Update DB
+        } catch (e) {
+            // 401/404 means no profile pic or private
+            // Update DB to 'none' so we don't retry forever
+        }
+    }
+}
+```
 
-## Shared Architecture (Database & UI)
-Regardless of the option, the data structure is similar.
+## 2. Integration
+*   **`WhatsAppInstance.ts`:** Initialize `ProfilePictureManager`.
+*   **`MessageManager.ts`:** Call `enqueue` when new contacts/chats appear.
 
-### Database
-*   `stealth_schedules` table:
-    *   `id`, `instance_id`, `name`, `start_time` (HH:MM), `end_time` (HH:MM), `days`, `enabled`.
-    *   `mode`: 'GLOBAL_NOBODY' (Option B) or 'SPECIFIC_CONTACTS' (Option A).
-*   `stealth_targets` table (Only used for Option A):
-    *   `schedule_id`, `jid`.
+## 3. Database Migration
+*   Add `profile_picture` to `chats` table (if missing).
+*   Add `profile_picture_timestamp` to track when we last fetched it (to refresh periodically).
 
-### UI
-*   **Settings -> Stealth Scheduler:**
-    *   List of active schedules.
-    *   **Add Schedule Modal:**
-        *   Name input.
-        *   Time Range pickers.
-        *   Day selector (M T W T F S S).
-        *   **Mode Selector:** "Hide from Everyone" vs "Hide from Specific People".
-        *   **Contact Picker:** Only shown if "Specific People" is selected.
+## 4. Risks
+*   **Rate Limits:** WhatsApp is strict. We should stick to 1 fetch every 2-5 seconds.
+*   **Storage:** 5000 contacts * 50KB = 250MB. Acceptable for HA Add-on.
 
----
-
-## Recommendation
-We can build the **Shared Architecture** first.
-Then, we implement **Option B** as the baseline.
-Finally, we *attempt* **Option A**. If the raw XML query fails or is too unstable, we disable that mode in the UI or fallback to Option B.
+## 5. Execution Steps
+1.  **Migrate:** Add columns.
+2.  **Create:** `ProfilePictureManager.ts`.
+3.  **Integrate:** Hook into `WhatsAppInstance`.
+4.  **UI:** Update frontend to display the image.

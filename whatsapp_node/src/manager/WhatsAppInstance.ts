@@ -22,6 +22,7 @@ import { ChatManager } from './modules/ChatManager';
 import { QRManager } from './modules/QRManager';
 import { EphemeralManager } from './modules/EphemeralManager';
 import { StealthManager } from './modules/StealthManager';
+import { ProfilePictureManager } from './modules/ProfilePictureManager';
 
 export class WhatsAppInstance {
     public id: number;
@@ -44,6 +45,7 @@ export class WhatsAppInstance {
     private chatManager: ChatManager | null = null;
     public ephemeralManager: EphemeralManager | null = null;
     public stealthManager: StealthManager | null = null;
+    public profilePictureManager: ProfilePictureManager | null = null;
     private qrManager: QRManager;
     
     // Health Monitor
@@ -139,14 +141,22 @@ export class WhatsAppInstance {
                 });
             }
 
-            // 2. Initialize Managers
-            this.messageManager = new MessageManager(this.id, this.sock, this.io, this.logger);
+            // Initialize Managers
+            this.messageManager = new MessageManager(
+                this.id, 
+                this.sock, 
+                this.io, 
+                this.logger, 
+                (jids) => this.profilePictureManager?.enqueue(jids)
+            );
             this.workerManager = new WorkerManager(this.id, this.sock, () => this.status, () => this.reconnect());
             this.chatManager = new ChatManager(this.id, this.sock, this.io);
             this.ephemeralManager = new EphemeralManager(this.id, this.sock, this.io);
             this.ephemeralManager.start();
             this.stealthManager = new StealthManager(this.id, this.sock);
             this.stealthManager.start();
+            this.profilePictureManager = new ProfilePictureManager(this.id, this.sock);
+            // ProfilePictureManager starts on demand via enqueue
 
             // Connection Updates
             this.sock.ev.on('connection.update', async (update) => {
